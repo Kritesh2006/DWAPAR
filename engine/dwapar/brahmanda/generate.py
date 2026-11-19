@@ -215,6 +215,7 @@ def generate_world(cfg: WorldConfig) -> World:
         "sst": temp.copy(),
         "tectonic_stress": generator(s, "tectonics.stress0").random(elev.shape) * static["stress_rate"],
         "lava": np.zeros_like(elev),
+        "ice": np.zeros_like(elev),
         "elevation": elev,
         "temperature": temp,
         "surface_water": surface_water,

@@ -76,6 +76,15 @@ DEPOSITION_FRACTION = 0.5
 TALUS_SLOPE = 0.25
 THERMAL_K = 2.0e-7          # talus creep: ~0.1 m/yr on a 45° slope
 COAST_MIN_M = 0.5
+SNOW_TO_ICE_MM = 500.0     # perennial snowpack (w.e.) beyond this compacts into glacier ice
+FIRN_RATE_DAY = 0.002      # fraction of that excess compacting per day
+ICE_DENSITY = 0.917        # ice thickness (m) = water equivalent (m) / 0.917
+ICE_U0_M_YR = 30.0         # Glen-law ice speed for 100 m of ice on a 0.1 slope (∝ H⁴ · slope³)
+ICE_MAX_FRACTION_DAY = 0.05
+ICE_DDF_MM = 7.0           # ice melt, mm w.e. per positive degree-day
+SUBLIMATION_MM_DAY = 0.4   # snow/ice sublimation in full sun and dry air
+CALVING_DAY = 0.02         # fraction of ice on coastal land tiles calving to the sea per day
+SEA_EVENT_M = 0.5          # report a sea-level change once it exceeds this since the last report
 QUAKE_LOAD_YEARS = 30.0    # years for a fully active boundary to load to failure
 VOLCANO_RECURRENCE_YEARS = 60.0
 
@@ -191,7 +200,7 @@ class Prakriti:
         surface_t = np.where(ocean, f["sst"], t_season)
         t_eq = surface_t + diurnal * (insol - q_today) * 2.0
         t_eq += (weather - 0.5) * 6.0
-        t_eq -= np.where(f["snow"] > 20.0, 3.0, 0.0)  # snow albedo
+        t_eq -= np.where((f["snow"] > 20.0) | (f["ice"] > 100.0), 3.0, 0.0)  # snow / ice albedo
         t_eq += 12.0 * f["fire"] + 25.0 * f["lava"]
         tau = np.where(open_water, TAU_AIR_OCEAN_H, TAU_LAND_H)
         f["temperature"] = t_air + (t_eq - t_air) * (1.0 - np.exp(-dt / tau))
@@ -336,6 +345,8 @@ class Prakriti:
         self._sediment(w, land)
         self._tectonics(w, cal, events)
         self._volcanism(w, cal, events)
+        self._cryosphere(w, cal)
+        self._sea_level(w, cal, events)
         f["lava"] *= 0.97  # lava fields cool over weeks–months
         f["lava"][f["lava"] < 1e-3] = 0.0
 
@@ -354,7 +365,7 @@ class Prakriti:
         sm = w.soil_moisture
         f_t, f_w = _veg_factors(t, sm)
         k = carrying_capacity(w.fertility, f["precip_ema"])
-        flooded = f["surface_water"] > 600.0
+        flooded = (f["surface_water"] > 600.0) | (f["ice"] > SNOW_TO_ICE_MM)  # drowned or buried under ice
         b = f["biomass"]
         growth = VEG_GROWTH_DAY * b * (1.0 - b / np.maximum(k, 1e-6)) * f_t * f_w
         growth = np.maximum(growth, -0.02 * b)
@@ -400,7 +411,8 @@ class Prakriti:
         elev = f["elevation"]
         # Slopes are measured to base level: a coastal tile sees the sea surface (0 m), not the sea floor,
         # otherwise every shoreline would register as a hundreds-of-metres cliff and collapse continuously.
-        direction, drop, slope = steepest_descent(np.maximum(elev, 0.0), self.cfg.tile_size_m)
+        sea = w.sea_level
+        direction, drop, slope = steepest_descent(np.maximum(elev, sea), self.cfg.tile_size_m)
         cover = np.clip(f["biomass"] / 10.0, 0, 1)
         capacity_t = EROSION_K * np.sqrt(np.maximum(f["flow_flux"], 0)) * slope * (1.0 - 0.8 * cover) * rho_a
         still = (~land) | (f["surface_water"] > 1500.0)  # sea and lakes trap everything
@@ -409,7 +421,7 @@ class Prakriti:
 
         # Erosion where the flow can carry more than it holds.
         deficit = np.where(land & (direction >= 0), np.maximum(capacity_t - sed, 0.0), 0.0)
-        max_dz = np.minimum(0.25 * drop, np.maximum(elev - COAST_MIN_M, 0.0))
+        max_dz = np.minimum(0.25 * drop, np.maximum(elev - (sea + COAST_MIN_M), 0.0))
         thermal_dz = np.where(land & (slope > TALUS_SLOPE),
                               THERMAL_K * (slope - TALUS_SLOPE) * self.cfg.tile_size_m, 0.0)
         erode_dz = np.minimum(deficit / rho_a + thermal_dz, max_dz)
@@ -460,13 +472,13 @@ class Prakriti:
         f["tectonic_stress"][y0:y1, x0:x1] = patch * 0.05 * rng.random(patch.shape)
         mag = 4.6 + 0.9 * np.log10(1.0 + released) + 0.3 * rng.normal()
         # Landslides: shaking moves loose material off slopes into the sediment load downslope.
-        direction, drop, slope = steepest_descent(np.maximum(f["elevation"], 0.0), self.cfg.tile_size_m)
+        direction, drop, slope = steepest_descent(np.maximum(f["elevation"], w.sea_level), self.cfg.tile_size_m)
         yy, xx = np.indices(critical.shape)
         r = 2 + int(max(0.0, mag - 5.0) * 2)
         zone = ((yy - y) ** 2 + (xx - x) ** 2 <= r * r) & (slope > 0.03) & (direction >= 0) & ~w.is_ocean
         slide_dz = np.where(zone, np.minimum(0.02 * (mag - 4.0) * slope * self.cfg.tile_size_m * 0.01,
                                              0.2 * drop), 0.0)
-        slide_dz = np.minimum(slide_dz, np.maximum(f["elevation"] - COAST_MIN_M, 0.0))
+        slide_dz = np.minimum(slide_dz, np.maximum(f["elevation"] - (w.sea_level + COAST_MIN_M), 0.0))
         slide_t = slide_dz * rho_a
         f["elevation"] -= slide_dz
         meta["deposits_eroded_t"] = meta.get("deposits_eroded_t", 0.0) + float(
@@ -520,6 +532,93 @@ class Prakriti:
                            "message": f"Volcanic eruption (VEI {vei}) at ({x}, {y}); "
                                       f"{volume_m3 / 1e6:.1f} million m³ of lava and ash"})
 
+    def _cryosphere(self, w: World, cal: Calendar) -> None:
+        """Snow → firn → glacier ice; ice flow, melt, sublimation and calving. All water-conserving."""
+        f, meta = w.f, w.meta
+        ocean = w.is_ocean
+        land = ~ocean
+        # 1. Compaction: snow surviving beyond SNOW_TO_ICE_MM slowly becomes ice.
+        firn = np.where(land, np.maximum(f["snow"] - SNOW_TO_ICE_MM, 0.0) * FIRN_RATE_DAY, 0.0)
+        f["snow"] -= firn
+        f["ice"] += firn
+        # 2. Sublimation (to the atmosphere) — strongest in sun and dry, cold air.
+        q_day = daily_mean_insolation(self.lat_col, cal.day_of_year, self.cfg.days_per_year)
+        rh = np.clip(f["atmo_water"] / saturation_capacity_mm(f["temp_day"]), 0.0, 1.0)
+        potential = SUBLIMATION_MM_DAY * (1.0 - rh) * np.clip(q_day / 0.3, 0.0, 1.5) * (f["temp_day"] < 2.0)
+        s_snow = np.minimum(f["snow"], potential)
+        f["snow"] -= s_snow
+        s_ice = np.minimum(f["ice"], np.maximum(potential - s_snow, 0.0))
+        f["ice"] -= s_ice
+        f["atmo_water"] += s_snow + s_ice
+        # 3. Melt of exposed ice (snow cover shields it).
+        melt = np.where(f["snow"] < 50.0, np.minimum(f["ice"], ICE_DDF_MM * np.maximum(f["temp_day"], 0.0)), 0.0)
+        f["ice"] -= melt
+        f["surface_water"] += melt
+        # 4. Flow (shallow-ice / Glen's law, n = 3): deformation speed u ∝ H⁴ · slope³ of the ice surface.
+        thick_m = f["ice"] / 1000.0 / ICE_DENSITY
+        if thick_m.max() > 0.0:
+            surface = f["elevation"] + thick_m
+            _, _, ice_slope = steepest_descent(surface, self.cfg.tile_size_m)
+            speed = ICE_U0_M_YR * (thick_m / 100.0) ** 4 * (np.clip(ice_slope, 0.0, 1.0) / 0.1) ** 3
+            frac = np.clip(speed / self.cfg.tile_size_m / self.cfg.days_per_year, 0.0, ICE_MAX_FRACTION_DAY)
+            mobile = f["ice"] * frac
+            delta, _ = mfd_flow(surface, mobile, 0.05, 1000.0 * ICE_DENSITY, self.cfg.tile_size_m, 1.0)
+            f["ice"] = np.maximum(f["ice"] + delta, 0.0)
+        # 5. Calving: ice reaching the sea breaks off (icebergs melt into the ocean); tidewater
+        #    glaciers on coastal tiles shed a fraction per day.
+        coastal = land & (neighbour_mean(ocean.astype(float)) > 0)
+        calve = np.where(ocean, f["ice"], np.where(coastal, f["ice"] * CALVING_DAY, 0.0))
+        f["ice"] -= calve
+        f["surface_water"] += calve
+        meta["ice_melt_mm"] = meta.get("ice_melt_mm", 0.0) + float(melt.sum())
+        meta["sublimation_mm"] = meta.get("sublimation_mm", 0.0) + float((s_snow + s_ice).sum())
+        meta["calved_mm"] = meta.get("calved_mm", 0.0) + float(calve.sum())
+
+    @staticmethod
+    def _level_for_volume(elev: np.ndarray, volume_mm: float) -> float:
+        """Water level S (m) such that Σ max(S − elev, 0) · 1000 = volume (mm·tiles). Bisection."""
+        lo = float(elev.min())
+        hi = float(elev.max()) + volume_mm / 1000.0 / elev.size + 1.0
+        for _ in range(64):
+            mid = 0.5 * (lo + hi)
+            if np.maximum(mid - elev, 0.0).sum() * 1000.0 < volume_mm:
+                lo = mid
+            else:
+                hi = mid
+        return 0.5 * (lo + hi)
+
+    def _sea_level(self, w: World, cal: Calendar, events: list[dict]) -> None:
+        """Dynamic sea level: the ocean's water volume fills the sea floor to a common level.
+
+        Tiles whose floor lies below the new level become ocean (their own water joins the sea);
+        tiles left above it become land and keep the water standing on them (it drains back as
+        rivers). Water is redistributed exactly: Σ water before = Σ water after."""
+        f, meta = w.f, w.meta
+        elev, sw = f["elevation"], f["surface_water"]
+        s_old = w.sea_level
+        o_old = elev < s_old
+        level = s_old
+        for _ in range(3):  # membership and volume depend on each other; converges in 1–2 passes
+            o = elev < level
+            avail = float(sw[o_old | o].sum() - sw[o_old & ~o].sum())
+            level = self._level_for_volume(elev, avail)
+        o_new = elev < level
+        avail = float(sw[o_old | o_new].sum() - sw[o_old & ~o_new].sum())
+        target = (level - elev[o_new]) * 1000.0
+        total = float(target.sum())
+        if total > 0:
+            sw[o_new] = target * (avail / total)
+        meta["sea_level"] = level
+        ref = meta.get("sea_level_reported", 0.0)
+        if abs(level - ref) >= SEA_EVENT_M:
+            n_old = int(meta.get("ocean_tiles_reported", int(o_old.sum())))
+            n_new = int(o_new.sum())
+            direction = "rose" if level > ref else "fell"
+            events.append({"tick": cal.tick, "kind": "sea_level", "x": None, "y": None,
+                           "message": f"Sea level {direction} to {level:+.2f} m (ocean tiles {n_old} → {n_new})"})
+            meta["sea_level_reported"] = level
+            meta["ocean_tiles_reported"] = n_new
+
     def _disaster_watch(self, w: World, cal: Calendar, events: list[dict], land: np.ndarray) -> None:
         """Report floods and droughts from the physical state (with hysteresis, so one episode = one event)."""
         f, meta = w.f, w.meta
@@ -549,4 +648,4 @@ class Prakriti:
         f = w.f
         _, _, slope = steepest_descent(f["elevation"], self.cfg.tile_size_m)
         w.terrain = classify(f["elevation"], slope, f["surface_water"], w.soil_moisture, f["flow_flux"],
-                             f["snow"], f["biomass"], f["precip_ema"])
+                             f["snow"], f["biomass"], f["precip_ema"], ice=f["ice"], sea_level=w.sea_level)

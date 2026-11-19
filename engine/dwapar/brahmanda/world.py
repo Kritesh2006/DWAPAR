@@ -23,6 +23,8 @@ Units (documented in WORLD_LAWS.md):
     sst              °C ocean mixed-layer temperature (meaningful on ocean tiles)
     tectonic_stress  0.. accumulated elastic strain at plate boundaries (released by earthquakes)
     lava             0..1 heat of recently erupted lava (decays as it cools)
+    ice              mm water-equivalent of glacier ice (perennial snow compacted into ice)
+  meta["sea_level"]  m, global sea level solved daily from ocean water volume (0 at genesis)
   static (fixed at generation, recomputable from config):
     plate_id, uplift_rate (m/yr), stress_rate, volcano (0..1 vent strength),
     aquifer_capacity (mm), current_u/current_v (ocean current, tiles/hour)
@@ -48,6 +50,7 @@ class Terrain(IntEnum):
     HILLS = 7
     MOUNTAINS = 8
     SNOW = 9
+    GLACIER = 10
 
 
 #: Dynamic state arrays that evolve during simulation (float64).
@@ -72,6 +75,7 @@ DYNAMIC_FIELDS = (
     "sst",
     "tectonic_stress",
     "lava",
+    "ice",
 )
 
 #: Finite, nonrenewable deposits (tonnes per tile). Only extraction may reduce them.
@@ -87,7 +91,7 @@ ALL_FLOAT_FIELDS = DYNAMIC_FIELDS + MINERAL_FIELDS + STATIC_FIELDS
 NON_NEGATIVE = (
     "surface_water", "soil_water", "atmo_water", "snow", "biomass", "organic_matter",
     "fire", "drought_days", "flow_flux", "precip_ema", "precip_today", "field_capacity",
-    "groundwater", "sediment", "tectonic_stress", "lava", "volcano", "aquifer_capacity",
+    "groundwater", "sediment", "tectonic_stress", "lava", "volcano", "aquifer_capacity", "ice",
 ) + MINERAL_FIELDS
 
 #: Bulk density used to convert eroded/deposited/erupted volume (m³) to mass (t).
@@ -131,8 +135,13 @@ class World:
         return self.cfg.height, self.cfg.width
 
     @property
+    def sea_level(self) -> float:
+        """Global sea level (m). Ocean = every tile whose floor lies below it."""
+        return float(self.meta.get("sea_level", 0.0))
+
+    @property
     def is_ocean(self) -> np.ndarray:
-        return self.f["elevation"] < 0.0
+        return self.f["elevation"] < self.sea_level
 
     @property
     def soil_moisture(self) -> np.ndarray:

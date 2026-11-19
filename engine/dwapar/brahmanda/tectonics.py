@@ -106,7 +106,8 @@ def build_static(cfg: WorldConfig, elevation: np.ndarray) -> dict[str, np.ndarra
     # Aquifer storage capacity (mm of water): thick porous sediments in lowlands, thin on mountains.
     porous = fbm(cfg.width, cfg.height, cfg.seed, "hydro.aquifer", base_cell=28, octaves=4)
     e_norm = np.clip(elevation / cfg.max_elevation_m, 0, 1)
-    aquifer = np.where(elevation < 0, 0.0, (400.0 + 2600.0 * porous) * (1.0 - 0.8 * e_norm))
+    aquifer = np.where(elevation < 0, 0.0,  # generation-time sea level is 0
+ (400.0 + 2600.0 * porous) * (1.0 - 0.8 * e_norm))
 
     # Surface ocean currents (tiles/hour): wind-driven zonal flow; land blocking handled at run time.
     lat = np.linspace(cfg.lat_top, cfg.lat_bottom, cfg.height)[:, None]

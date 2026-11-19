@@ -106,7 +106,7 @@ def test_frame_dynamics_resources_and_budgets(client):
     b = client.get("/api/budgets").json()
     assert b["closure_errors"]["water"] < 1e-9
     st = client.get("/api/status").json()
-    assert st["world_age_years"] > 0 and st["engine_version"] == "0.2.0"
+    assert st["world_age_years"] > 0 and st["engine_version"] == "0.3.0"
 
 
 def test_load_world_by_id(client):

@@ -17,6 +17,7 @@ RIVER_FLUX_MM_H = 0.6      # sustained outflow ≈ top 2 % of land: draining ~25
 WETLAND_WATER_MM = 80.0
 WETLAND_SOIL = 0.85
 SNOW_SWE_MM = 20.0
+GLACIER_ICE_MM = 1000.0     # ≥ ~1.1 m of ice
 MOUNTAIN_M = 1900.0
 HILL_M = 750.0
 HILL_SLOPE = 0.08
@@ -34,9 +35,11 @@ def classify(
     snow: np.ndarray,
     biomass: np.ndarray,
     precip_ema: np.ndarray,
+    ice: np.ndarray | None = None,
+    sea_level: float = 0.0,
 ) -> np.ndarray:
     t = np.full(elevation.shape, Terrain.PLAINS, dtype=np.uint8)
-    land = elevation >= 0
+    land = elevation >= sea_level
 
     # Lowest priority first; later assignments override.
     desert = land & (precip_ema < DESERT_PRECIP_MM_DAY) & (soil_moisture < DESERT_SOIL) & (biomass < 2.0)
@@ -49,6 +52,8 @@ def classify(
     )
     t[wet] = Terrain.WETLAND
     t[land & (snow >= SNOW_SWE_MM)] = Terrain.SNOW
+    if ice is not None:
+        t[land & (ice >= GLACIER_ICE_MM)] = Terrain.GLACIER
     t[land & (flow_flux >= RIVER_FLUX_MM_H)] = Terrain.RIVER
     t[land & (surface_water >= LAKE_DEPTH_MM)] = Terrain.LAKE
     t[~land] = Terrain.OCEAN

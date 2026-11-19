@@ -47,6 +47,8 @@ class Simulation:
         if cfg.spinup_days_per_season > 0:
             from .prakriti.spinup import spin_up
             spin_up(world, sim.prakriti, days_per_season=cfg.spinup_days_per_season)
+        from .laws import note_laws
+        note_laws(world.meta, 0)
         sim.baseline = sim.budgets()
         world.meta["baseline"] = sim.baseline
         if store is not None:
@@ -153,12 +155,13 @@ class Simulation:
             "groundwater": float(f["groundwater"].sum()),
             "atmosphere": float(f["atmo_water"].sum()),
             "snow": float(f["snow"].sum()),
+            "ice": float(f["ice"].sum()),
         }
 
     def total_water(self) -> float:
         f = self.world.f
         return float(f["surface_water"].sum() + f["soil_water"].sum() + f["atmo_water"].sum() + f["snow"].sum()
-                     + f["groundwater"].sum())
+                     + f["groundwater"].sum() + f["ice"].sum())
 
     def budgets(self) -> dict:
         """Conserved / audited quantities (see WORLD_LAWS.md § Conservation)."""
@@ -181,6 +184,7 @@ class Simulation:
             "ocean_tiles": int(ocean.sum()),
             "mean_ocean_depth_m": float(f["surface_water"][ocean].mean() / 1000.0) if ocean.any() else 0.0,
             "land_mean_elevation_m": float(f["elevation"][~ocean].mean()) if (~ocean).any() else 0.0,
+            "sea_level_m": w.sea_level,
         }
 
     def budget_errors(self) -> dict:
@@ -224,5 +228,18 @@ class Simulation:
         world, wid = store.load_checkpoint(checkpoint_id=checkpoint_id, world_id=world_id)
         sim = cls(world, store, wid)
         store.truncate_after(wid, world.tick)  # history beyond the checkpoint never happened
+        sim.adopt_current_laws()
         sim.prakriti.reclassify(world)
         return sim
+
+    def adopt_current_laws(self) -> bool:
+        """Continue an older world under the current laws, recording the switch in its history."""
+        from .laws import LAWS_VERSION, note_laws
+        changed = note_laws(self.world.meta, self.world.tick)
+        if changed:
+            ev = {"tick": self.world.tick, "kind": "laws_change", "x": None, "y": None,
+                  "message": f"Laws of the world updated to version {LAWS_VERSION} at this point in history"}
+            self.recent_events.append(ev)
+            if self.store is not None and self.world_id is not None:
+                self.store.add_events(self.world_id, [ev])
+        return changed

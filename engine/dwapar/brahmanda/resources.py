@@ -45,7 +45,7 @@ def resource_field(world: World, name: str) -> np.ndarray:
     f, area = world.f, tile_area_m2(world)
     land = ~world.is_ocean
     if name == "freshwater":
-        mm = (f["surface_water"] + f["soil_water"] + f["snow"] + f["groundwater"]) * land
+        mm = (f["surface_water"] + f["soil_water"] + f["snow"] + f["groundwater"] + f["ice"]) * land
         return mm / 1000.0 * area
     if name == "saltwater":
         return f["surface_water"] * world.is_ocean / 1000.0 * area
@@ -89,7 +89,7 @@ def extract(world: World, name: str, y: int, x: int, amount: float) -> float:
         f["organic_matter"][y, x] = max(f["organic_matter"][y, x] - take * 1000.0 / area, 0.0)
     elif name in ("freshwater", "saltwater"):
         mm = take / area * 1000.0
-        order = ("surface_water",) if name == "saltwater" else ("surface_water", "soil_water", "snow", "groundwater")
+        order = ("surface_water",) if name == "saltwater" else ("surface_water", "soil_water", "snow", "groundwater", "ice")
         for store in order:
             d = min(mm, f[store][y, x])
             f[store][y, x] -= d

@@ -5,11 +5,14 @@ most ``budget_minutes`` of wall time, checkpointing at every recorded year, then
 The next session resumes from the latest checkpoint instead of restarting.
 
 Outputs (committed to the repository):
-    experiments/results/<name>.jsonl   one JSON record per recorded simulated year
-    experiments/status.json            progress of every experiment
-    experiments/checkpoints/<name>.npz  latest state (portable; lets a fresh clone resume)
+    experiments/laws-<v>/results/<name>.jsonl   one JSON record per recorded simulated year
+    experiments/laws-<v>/status.json            progress of every experiment
+    experiments/laws-<v>/checkpoints/<name>.npz latest state (portable; a fresh clone resumes)
 Checkpoints (local working copies, not committed):
-    data/experiments/<name>.sqlite
+    data/experiments/laws-<v>/<name>.sqlite
+Experiments from earlier laws stay frozen in their own directory and are never continued in place;
+a *continuation* experiment may start from an older checkpoint, and the world's laws_history then
+records exactly from which tick the new laws applied.
 
 Recording cadence: every year up to year 100, every 10 years to 1,000, every 100 beyond.
 Nothing here alters the physics or prevents collapse; it only observes.
@@ -30,11 +33,15 @@ from .config import WorldConfig
 from .simulation import Simulation
 from .smriti.store import CheckpointError, Store
 
+from .laws import LAWS_VERSION
+
 ROOT = Path(__file__).resolve().parents[2]
-RESULTS = ROOT / "experiments" / "results"
-STATUS = ROOT / "experiments" / "status.json"
-CKPT_DIR = ROOT / "data" / "experiments"
-PORTABLE = ROOT / "experiments" / "checkpoints"  # latest checkpoint per experiment, committed to git
+#: Results produced under different laws are kept apart: experiments/laws-<version>/...
+EXP_ROOT = ROOT / "experiments" / f"laws-{LAWS_VERSION}"
+RESULTS = EXP_ROOT / "results"
+STATUS = EXP_ROOT / "status.json"
+CKPT_DIR = ROOT / "data" / "experiments" / f"laws-{LAWS_VERSION}"
+PORTABLE = EXP_ROOT / "checkpoints"  # latest checkpoint per experiment, committed to git
 
 
 @dataclass
@@ -43,6 +50,8 @@ class ExperimentSpec:
     seed: int
     size: int = 128
     target_years: int = 10_000
+    #: Optional path (relative to the repo) of a portable checkpoint to start from instead of genesis.
+    start_from: Optional[str] = None
 
 
 def record_interval(year: int) -> int:
@@ -136,9 +145,10 @@ def _export_portable(name: str, sim: Simulation) -> None:
     tmp.replace(PORTABLE / f"{name}.npz")
 
 
-def _import_portable(name: str, store: Store) -> bool:
+def _import_portable(name: str, store: Store, base: Optional[Path] = None) -> bool:
     from .smriti.store import _deserialise
-    blob_path, cfg_path = PORTABLE / f"{name}.npz", PORTABLE / f"{name}.config.json"
+    base = base if base is not None else PORTABLE
+    blob_path, cfg_path = base / f"{name}.npz", base / f"{name}.config.json"
     if not (blob_path.exists() and cfg_path.exists()):
         return False
     cfg = WorldConfig.from_dict(json.loads(cfg_path.read_text()))
@@ -196,9 +206,15 @@ def run_experiment(spec: ExperimentSpec, budget_minutes: float, log=print) -> di
     store = Store(CKPT_DIR / f"{spec.name}.sqlite")
     results_path = RESULTS / f"{spec.name}.jsonl"
     if not store.list_checkpoints() and _import_portable(spec.name, store):
-        log(f"[{spec.name}] imported portable checkpoint from experiments/checkpoints/")
+        log(f"[{spec.name}] imported portable checkpoint from {PORTABLE}")
+    elif not store.list_checkpoints() and spec.start_from:
+        src = ROOT / spec.start_from
+        if not _import_portable(src.name.removesuffix(".npz"), store, src.parent):
+            raise SystemExit(f"start_from checkpoint not found: {spec.start_from}")
+        log(f"[{spec.name}] continuation: starting from {spec.start_from} under laws {LAWS_VERSION}")
     try:
         sim = Simulation.from_checkpoint(store)
+        sim.adopt_current_laws()
         if sim.cfg.seed != spec.seed or sim.cfg.width != spec.size:
             raise RuntimeError(f"checkpoint for {spec.name} does not match its spec")
         resumed = True
@@ -217,7 +233,9 @@ def run_experiment(spec: ExperimentSpec, budget_minutes: float, log=print) -> di
         kept = [ln for ln in lines if json.loads(ln)["year"] <= year]
         results_path.write_text("".join(k + "\n" for k in kept))
     status = _load_status()
-    entry = status.get(spec.name, {"spec": asdict(spec), "wall_s_total": 0.0, "notes": []})
+    entry = status.get(spec.name, {"spec": asdict(spec), "wall_s_total": 0.0, "notes": [],
+                                   "start_year": year, "laws_version": LAWS_VERSION})
+    start_year = entry.get("start_year", 0)
     entry["spec"] = asdict(spec)
     version = _code_version()
     entry.setdefault("engine_versions", [])
@@ -233,7 +251,7 @@ def run_experiment(spec: ExperimentSpec, budget_minutes: float, log=print) -> di
     entry["state"] = "running"
     try:
         while year < spec.target_years:
-            interval = record_interval(year)
+            interval = record_interval(year - start_year)
             block_start = time.monotonic()
             ticks = 0
             acc.reset()
@@ -243,7 +261,7 @@ def run_experiment(spec: ExperimentSpec, budget_minutes: float, log=print) -> di
                 acc.sample()
                 if time.monotonic() > deadline:
                     break
-            if time.monotonic() > deadline and sim.world.tick % (dpy * tpd * interval) != 0:
+            if time.monotonic() > deadline and ticks < interval * dpy * tpd:
                 # Budget ran out mid-block: keep the last checkpoint; this partial block is discarded.
                 entry["state"] = "paused (session budget reached)"
                 break
@@ -251,6 +269,8 @@ def run_experiment(spec: ExperimentSpec, budget_minutes: float, log=print) -> di
             el = time.monotonic() - block_start
             rec = acc.record(year, entry["wall_s_total"] + (time.monotonic() - t_session), el / ticks * 1000)
             rec["engine"] = version
+            rec["laws_version"] = LAWS_VERSION
+            rec["laws_history"] = sim.world.meta.get("laws_history", [])
             sim.world.validate()
             with results_path.open("a") as fh:
                 fh.write(json.dumps(rec) + "\n")
@@ -287,9 +307,11 @@ def run_experiment(spec: ExperimentSpec, budget_minutes: float, log=print) -> di
 
 
 DEFAULT_SUITE = [
+    ExperimentSpec("seed2026-64", 2026, 64),
+    ExperimentSpec("seed2026-64-from-1.5-y100", 2026, 64,
+                   start_from="experiments/laws-1.5/checkpoints/seed2026-64.npz"),
     ExperimentSpec("seed42-128", 42, 128),
     ExperimentSpec("seed7-128", 7, 128),
-    ExperimentSpec("seed2026-64", 2026, 64),
 ]
 
 
