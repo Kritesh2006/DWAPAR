@@ -3,6 +3,7 @@
     python -m dwapar serve   [--seed 42] [--db data/dwapar.sqlite] [--port 8000]
     python -m dwapar run     [--seed 42] [--db ...] [--days N] [--speed 0]   # headless
     python -m dwapar bench   [--size 128] [--days 10]
+    python -m dwapar experiment [--name seed42-128] [--budget-minutes 30]   # resumable long runs
 """
 
 from __future__ import annotations
@@ -90,6 +91,12 @@ def cmd_bench(args) -> None:
     print(f"python {sys.version.split()[0]}, numpy {np.__version__}")
 
 
+def cmd_experiment(args) -> None:
+    from .experiment import run_suite
+
+    run_suite(args.name or None, args.budget_minutes)
+
+
 def main(argv=None) -> None:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(message)s")
     p = argparse.ArgumentParser(prog="dwapar", description="DWAPAR — An Experiment in Digital Civilization")
@@ -110,8 +117,11 @@ def main(argv=None) -> None:
             sp.add_argument("--days", type=int, default=0, help="stop after N simulated days (0 = forever)")
         if name == "bench":
             sp.add_argument("--days", type=int, default=10)
+    ex = sub.add_parser("experiment", help="advance the long-term experiment suite (resumable)")
+    ex.add_argument("--name", action="append", help="experiment name (repeatable); default: all")
+    ex.add_argument("--budget-minutes", type=float, default=30.0)
     args = p.parse_args(argv)
-    {"serve": cmd_serve, "run": cmd_run, "bench": cmd_bench}[args.cmd](args)
+    {"serve": cmd_serve, "run": cmd_run, "bench": cmd_bench, "experiment": cmd_experiment}[args.cmd](args)
 
 
 if __name__ == "__main__":
