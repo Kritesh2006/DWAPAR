@@ -93,3 +93,25 @@ def test_runner_respects_speed(tmp_path):
     time.sleep(2.0)
     obs.shutdown()
     assert 25 <= obs.sim.world.tick <= 55  # ~40 expected at 20 sim-hours/s
+
+
+def test_frame_dynamics_resources_and_budgets(client):
+    client.post("/api/control", json={"action": "step", "ticks": 3})
+    fr = client.get("/api/frame?layers=terrain,clouds,insolation,rain,flow_dir,lava,sst,res_iron_ore").json()
+    assert fr["tick"] == 3 and set(fr["layers"]) == {"terrain", "clouds", "insolation", "rain", "flow_dir", "lava",
+                                                     "sst", "res_iron_ore"}
+    assert client.get("/api/frame?layers=population").status_code == 404
+    dyn = client.get("/api/dynamics").json()
+    assert len(dyn["wind_u_rows"]) == 32
+    b = client.get("/api/budgets").json()
+    assert b["closure_errors"]["water"] < 1e-9
+    st = client.get("/api/status").json()
+    assert st["world_age_years"] > 0 and st["engine_version"] == "0.2.0"
+
+
+def test_load_world_by_id(client):
+    first = client.get("/api/status").json()["world_id"]
+    client.post("/api/new", json={"seed": 9, "width": 32, "height": 32})
+    r = client.post("/api/load_world", json={"world_id": first}).json()
+    assert r["world_id"] == first
+    assert client.post("/api/load_world", json={"world_id": 999}).status_code == 404

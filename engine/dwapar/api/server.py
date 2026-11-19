@@ -42,7 +42,21 @@ LAYERS = {
     "precipitation": ("precip_ema", "mm/day"),
     "fire": ("fire", "0–1"),
     "fire_risk": ("fire_risk", "0–1"),
+    "sst": ("sst", "°C"),
+    "groundwater": ("groundwater", "mm"),
+    "sediment": ("sediment", "t"),
+    "lava": ("lava", "0–1"),
+    "clouds": ("cloud_cover", "0–1"),
+    "rain": ("last_precip", "mm/h"),
+    "insolation": ("last_insolation", "0–1"),
+    "flow": ("flow_flux", "mm/h"),
+    "flow_dir": ("flow_dir", "0–8"),
+    "uplift": ("uplift_rate", "m/yr"),
+    "plates": ("plate_id", "id"),
+    "volcanoes": ("volcano", "0–1"),
+    "stress": ("tectonic_stress", "0–1"),
 }
+RESOURCE_LAYERS = {f"res_{n}": n for n in resources.ALL_RESOURCES}
 
 
 def layer_array(obs: Observatory, name: str) -> np.ndarray:
@@ -50,11 +64,21 @@ def layer_array(obs: Observatory, name: str) -> np.ndarray:
     w = sim.world
     if name == "terrain":
         return w.terrain
-    if name not in LAYERS:
+    if name not in LAYERS and name not in RESOURCE_LAYERS:
         raise KeyError(name)
+    if name in RESOURCE_LAYERS:
+        return resources.resource_field(w, RESOURCE_LAYERS[name])
     attr = LAYERS[name][0]
     if attr == "fire_risk":
         return sim.prakriti.fire_risk(w)
+    if attr == "cloud_cover":
+        return sim.prakriti.cloud_cover(w)
+    if attr in ("last_precip", "last_insolation"):
+        return getattr(sim.prakriti, attr)
+    if attr == "flow_dir":
+        from ..grid import steepest_descent
+        d, _, _ = steepest_descent(w.f["elevation"] + w.f["surface_water"] / 1000.0, w.cfg.tile_size_m)
+        return (d.astype(np.int16) + 1).astype(np.uint8)  # 0 = pit, 1..8 = NEIGHBOURS index + 1
     if attr in w.f:
         return w.f[attr]
     return getattr(w, attr)
@@ -88,6 +112,10 @@ class NewWorldBody(BaseModel):
 
 class LoadBody(BaseModel):
     checkpoint_id: int
+
+
+class LoadWorldBody(BaseModel):
+    world_id: int
 
 
 def create_app(db_path: str | Path = "data/dwapar.sqlite", default_cfg: Optional[WorldConfig] = None,
@@ -127,6 +155,8 @@ def create_app(db_path: str | Path = "data/dwapar.sqlite", default_cfg: Optional
                 "last_step_ms": round(sim.last_step_seconds * 1000, 2),
                 "burning_tiles": int((sim.world.f["fire"] > 0).sum()),
                 "error": o.runner.error,
+                "world_age_years": sim.world.tick / (sim.cfg.ticks_per_day * sim.cfg.days_per_year),
+                "engine_version": __import__("dwapar").__version__,
                 "recovered_from_checkpoint": o.recovered,
             }
 
@@ -141,8 +171,10 @@ def create_app(db_path: str | Path = "data/dwapar.sqlite", default_cfg: Optional
 
     @app.get("/api/layers")
     def list_layers():
-        return [{"name": k, "unit": v[1]} for k, v in LAYERS.items()] + \
-               [{"terrain_classes": [t.name.lower() for t in Terrain]}]
+        return {"layers": [{"name": k, "unit": v[1]} for k, v in LAYERS.items()],
+                "resource_layers": [{"name": k, "resource": v, "unit": resources.UNITS[v]}
+                                    for k, v in RESOURCE_LAYERS.items()],
+                "terrain_classes": [t.name.lower() for t in Terrain]}
 
     @app.get("/api/layer/{name}")
     def get_layer(name: str):
@@ -154,8 +186,32 @@ def create_app(db_path: str | Path = "data/dwapar.sqlite", default_cfg: Optional
                 raise HTTPException(404, f"unknown layer {name}")
             out = encode(np.array(arr))
             out.update(name=name, width=sim.cfg.width, height=sim.cfg.height, tick=sim.world.tick,
-                       unit=LAYERS[name][1])
+                       unit=LAYERS[name][1] if name in LAYERS else resources.UNITS[RESOURCE_LAYERS[name]])
         return out
+
+    @app.get("/api/frame")
+    def get_frame(layers: str):
+        """Several layers captured under one lock, so they describe the same instant."""
+        names = [n for n in layers.split(",") if n][:16]
+        sim = obs().sim
+        with sim.lock:
+            frame = {"tick": sim.world.tick, "width": sim.cfg.width, "height": sim.cfg.height,
+                     "calendar": sim.calendar.to_dict(), "layers": {}}
+            for n in names:
+                try:
+                    frame["layers"][n] = encode(np.array(layer_array(obs(), n)))
+                except KeyError:
+                    raise HTTPException(404, f"unknown layer {n}")
+        return frame
+
+    @app.get("/api/dynamics")
+    def get_dynamics():
+        """Wind and ocean-current fields (tiles/hour) for data-driven animation."""
+        sim = obs().sim
+        p = sim.prakriti
+        hpt = sim.cfg.hours_per_tick
+        return {"wind_u_rows": (p.wind_u[:, 0] / hpt).tolist(), "wind_v_rows": (p.wind_v[:, 0] / hpt).tolist(),
+                "current": encode(np.stack([sim.world.f["current_u"], sim.world.f["current_v"]]))}
 
     @app.get("/api/tile/{x}/{y}")
     def get_tile(x: int, y: int):
@@ -247,6 +303,21 @@ def create_app(db_path: str | Path = "data/dwapar.sqlite", default_cfg: Optional
         except CheckpointError as exc:
             raise HTTPException(404, str(exc))
         return status()
+
+    @app.post("/api/load_world")
+    def load_world(body: LoadWorldBody):
+        cps = [c for c in obs().store.list_checkpoints(body.world_id)]
+        if not cps:
+            raise HTTPException(404, f"world {body.world_id} has no checkpoints")
+        latest = max(cps, key=lambda c: (c["tick"], c["id"]))
+        obs().load(latest["id"])
+        return status()
+
+    @app.get("/api/budgets")
+    def get_budgets():
+        sim = obs().sim
+        with sim.lock:
+            return {"budgets": sim.budgets(), "closure_errors": sim.budget_errors()}
 
     @app.post("/api/new")
     def new_world(body: NewWorldBody):

@@ -320,6 +320,7 @@ class Prakriti:
         f["lava"][f["lava"] < 1e-3] = 0.0
 
         self.reclassify(w)
+        self._disaster_watch(w, cal, events, land)
         if cal.is_year_start and cal.year > 0:
             events.append({"tick": cal.tick, "kind": "year", "x": None, "y": None,
                            "message": f"Year {cal.year + 1} begins"})
@@ -496,6 +497,31 @@ class Prakriti:
             events.append({"tick": cal.tick, "kind": "volcanic_eruption", "x": int(x), "y": int(y),
                            "message": f"Volcanic eruption (VEI {vei}) at ({x}, {y}); "
                                       f"{volume_m3 / 1e6:.1f} million m³ of lava and ash"})
+
+    def _disaster_watch(self, w: World, cal: Calendar, events: list[dict], land: np.ndarray) -> None:
+        """Report floods and droughts from the physical state (with hysteresis, so one episode = one event)."""
+        f, meta = w.f, w.meta
+        n_land = max(int(land.sum()), 1)
+        flooded = land & (f["surface_water"] > 600.0) & (f["surface_water"] < 1500.0)  # not lakes
+        frac_flood = flooded.sum() / n_land
+        if frac_flood > 0.03 and not meta.get("flood_active"):
+            ys, xs = np.nonzero(flooded)
+            meta["flood_active"] = True
+            meta["floods"] = meta.get("floods", 0) + 1
+            events.append({"tick": cal.tick, "kind": "flood", "x": int(np.median(xs)), "y": int(np.median(ys)),
+                           "message": f"Flooding: {int(flooded.sum())} land tiles under >0.6 m of water"})
+        elif frac_flood < 0.01 and meta.get("flood_active"):
+            meta["flood_active"] = False
+        dry = land & (f["drought_days"] > 45) & (f["biomass"] > 1.0)
+        frac_dry = dry.sum() / n_land
+        if frac_dry > 0.2 and not meta.get("drought_active"):
+            ys, xs = np.nonzero(dry)
+            meta["drought_active"] = True
+            meta["droughts"] = meta.get("droughts", 0) + 1
+            events.append({"tick": cal.tick, "kind": "drought", "x": int(np.median(xs)), "y": int(np.median(ys)),
+                           "message": f"Drought: {frac_dry:.0%} of vegetated land without rain for 45+ days"})
+        elif frac_dry < 0.08 and meta.get("drought_active"):
+            meta["drought_active"] = False
 
     def reclassify(self, w: World) -> None:
         f = w.f
