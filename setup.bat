@@ -62,12 +62,12 @@ echo   Setup complete.
 echo     start.bat           - run the world and open the observatory
 echo     start-headless.bat  - run the world without the dashboard
 echo.
-pause
+if not defined DWAPAR_NO_PAUSE pause
 exit /b 0
 
 :fail
 echo.
 echo   Setup did not finish. Read the message above, fix it, and run setup.bat again.
 echo.
-pause
+if not defined DWAPAR_NO_PAUSE pause
 exit /b 1

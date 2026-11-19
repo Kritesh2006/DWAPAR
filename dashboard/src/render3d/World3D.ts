@@ -53,6 +53,8 @@ export class World3D {
   private sky = new Sky();
   private sun = new THREE.DirectionalLight(0xffffff, 2.2);
   private hemi = new THREE.HemisphereLight(0xbfd6ff, 0x3a3020, 0.6);
+  // Representational moonlight so the world stays readable at night (not a simulated quantity).
+  private moon = new THREE.DirectionalLight(0x9db4e0, 0.0);
   private terrain: THREE.Mesh<THREE.BufferGeometry, THREE.MeshStandardMaterial> | null = null;
   private ocean: THREE.Mesh<THREE.PlaneGeometry, THREE.ShaderMaterial> | null = null;
   private lakes: THREE.Mesh<THREE.BufferGeometry, THREE.ShaderMaterial> | null = null;
@@ -102,7 +104,7 @@ export class World3D {
     this.sky.scale.setScalar(4500);
     const su = this.sky.material.uniforms;
     su.turbidity.value = 5; su.rayleigh.value = 1.4; su.mieCoefficient.value = 0.004; su.mieDirectionalG.value = 0.82;
-    this.scene.add(this.sky, this.sun, this.sun.target, this.hemi);
+    this.scene.add(this.sky, this.sun, this.sun.target, this.hemi, this.moon);
     this.scene.fog = new THREE.FogExp2(0xaec6dc, 0.0016);
     this.sun.castShadow = true;
     this.sun.shadow.mapSize.set(2048, 2048);
@@ -615,8 +617,10 @@ export class World3D {
     this.sun.target.position.set(0, 0, 0);
     this.sun.intensity = 2.6 * day;
     this.sun.color.setRGB(1, 0.78 + 0.2 * day, 0.6 + 0.35 * day);
-    this.hemi.intensity = 0.12 + 0.55 * day;
-    this.renderer.toneMappingExposure = 0.22 + 0.36 * day;
+    this.hemi.intensity = 0.32 + 0.35 * day;
+    this.moon.position.set(-dir.x * span, Math.max(0.4, -dir.y) * span, -dir.z * span);
+    this.moon.intensity = 0.9 * (1 - day);
+    this.renderer.toneMappingExposure = 0.42 + 0.16 * day;
     const fog = new THREE.Color().setRGB(0.02 + 0.66 * day, 0.03 + 0.75 * day, 0.06 + 0.8 * day);
     (this.scene.fog as THREE.FogExp2).color.copy(fog);
     const om = this.ocean?.material.uniforms;

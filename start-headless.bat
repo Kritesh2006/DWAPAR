@@ -13,7 +13,7 @@ title DWAPAR (headless)
 
 if not exist ".venv\Scripts\python.exe" (
   echo [X] DWAPAR is not set up yet. Run setup.bat first.
-  pause
+  if not defined DWAPAR_NO_PAUSE pause
   exit /b 1
 )
 pushd engine
@@ -25,4 +25,4 @@ if /i "%~1"=="experiment" (
 popd
 echo.
 echo   DWAPAR stopped. Latest state is saved in data\dwapar.sqlite
-pause
+if not defined DWAPAR_NO_PAUSE pause

@@ -142,7 +142,7 @@ const post = <T>(path: string, body?: unknown) =>
     body: body === undefined ? undefined : JSON.stringify(body),
   });
 
-function decode(b64: string, dtype: string): Float32Array | Uint8Array {
+export function decode(b64: string, dtype: string): Float32Array | Uint8Array {
   const bin = atob(b64);
   const bytes = new Uint8Array(bin.length);
   for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);

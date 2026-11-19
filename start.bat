@@ -12,12 +12,12 @@ title DWAPAR
 
 if not exist ".venv\Scripts\python.exe" (
   echo [X] DWAPAR is not set up yet. Run setup.bat first.
-  pause
+  if not defined DWAPAR_NO_PAUSE pause
   exit /b 1
 )
 if not exist "dashboard\dist\index.html" (
   echo [X] The dashboard has not been built. Run setup.bat first.
-  pause
+  if not defined DWAPAR_NO_PAUSE pause
   exit /b 1
 )
 
@@ -38,9 +38,9 @@ powershell -NoProfile -Command ^
   "$u='http://127.0.0.1:%PORT%/api/status'; for($i=0;$i -lt 120;$i++){ try { Invoke-WebRequest -UseBasicParsing $u -TimeoutSec 1 | Out-Null; exit 0 } catch { Start-Sleep -Milliseconds 500 } }; exit 1"
 if errorlevel 1 (
   echo [X] The engine did not respond. Check the "DWAPAR engine" window for errors.
-  pause
+  if not defined DWAPAR_NO_PAUSE pause
   exit /b 1
 )
-start "" "http://127.0.0.1:%PORT%/"
+if not defined DWAPAR_NO_BROWSER start "" "http://127.0.0.1:%PORT%/"
 echo   Observatory opened in your browser. The engine runs in the "DWAPAR engine" window.
 exit /b 0
