@@ -147,7 +147,7 @@ class Prakriti:
     def cloud_cover(self, w: World) -> np.ndarray:
         """Diagnostic 0..1 cloudiness from relative humidity (used by the dashboard)."""
         rh = w.f["atmo_water"] / saturation_capacity_mm(w.f["temperature"])
-        return np.clip((rh - 0.6) / 0.4, 0, 1)
+        return np.clip((rh - 0.75) / 0.25, 0, 1)
 
     # ================================================================ hourly
     def step_hour(self, w: World, cal: Calendar, events: list[dict]) -> dict:

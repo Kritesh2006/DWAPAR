@@ -1,182 +1,246 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { api, wsUrl, type Layer, type Stats, type Status, type WorldEvent } from "./api";
-import { LAYER_ORDER, LAYER_STYLES } from "./colormaps";
+import { api, wsUrl, type Frame, type Stats, type Status, type WorldEvent } from "./api";
+import { HEATMAPS, RESOURCE_NAMES, cssGradient, resourceStyle } from "./colormaps";
 import HistoryChart from "./components/HistoryChart";
-import MapView from "./components/MapView";
-import { ClockPanel, EnvironmentPanel, Panel, ResourcePanel, SaveLoad, TileInspector, Timeline } from "./components/Panels";
+import MapStage, { type MapHandle } from "./components/MapStage";
+import { Archive, DisasterPanel, Inspector, PlanetPanel } from "./components/Panels";
+import WorldTimeline from "./components/WorldTimeline";
+import type { Overlays, ViewMode } from "./render/Renderer";
 
-const LAYER_REFRESH_MS = 900;
+const LIVING_LAYERS = ["terrain", "vegetation", "moisture", "snow", "water", "flow", "flow_dir", "clouds", "rain",
+  "insolation", "fire", "lava", "temperature"];
+const FRAME_MS = 1000;
+const SPEEDS: [string, number][] = [["1h", 1], ["6h", 6], ["1d", 24], ["5d", 120], ["30d", 720], ["Max", 0]];
+const GROUPS = ["Environment", "Water", "Geology", "Hazards"] as const;
 
 export default function App() {
   const [status, setStatus] = useState<Status | null>(null);
-  const [connected, setConnected] = useState(false);
-  const [layerKey, setLayerKey] = useState("terrain");
-  const [layer, setLayer] = useState<Layer | null>(null);
-  const [elevation, setElevation] = useState<Layer | null>(null);
-  const [fire, setFire] = useState<Layer | null>(null);
+  const [linked, setLinked] = useState(false);
+  const [frame, setFrame] = useState<Frame | null>(null);
+  const [modeKey, setModeKey] = useState("living");
+  const [overlays, setOverlays] = useState<Overlays>({ clouds: true, daynight: true, rivers: true, weather: true, fire: true, grid: false, markers: true });
+  const [windRows, setWindRows] = useState<number[]>([]);
   const [stats, setStats] = useState<Stats | null>(null);
   const [history, setHistory] = useState<Stats[]>([]);
   const [events, setEvents] = useState<WorldEvent[]>([]);
+  const [errors, setErrors] = useState<Record<string, number> | null>(null);
   const [selected, setSelected] = useState<{ x: number; y: number } | null>(null);
-  const lastFetch = useRef({ tick: -1, at: 0, key: "", world: -1 });
-  const lastDayFetch = useRef({ day: -1, world: -1 });
+  const [tab, setTab] = useState<"planet" | "inspect" | "disasters">("planet");
+  const [drawer, setDrawer] = useState(true);
+  const [archive, setArchive] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const [fps, setFps] = useState(0);
+  const map = useRef<MapHandle>(null);
+  const fetching = useRef(false);
+  const lastFrame = useRef({ tick: -1, world: -1, key: "", at: 0, elevAt: -1e9 });
+  const lastDay = useRef({ day: -1, world: -1 });
 
-  // ---- realtime status over WebSocket (reconnects automatically) ----------
+  // ---- live status ----------------------------------------------------------------------------
   useEffect(() => {
-    let ws: WebSocket | null = null;
-    let timer: number | undefined;
-    let closed = false;
+    let ws: WebSocket | null = null, timer: number | undefined, closed = false;
     const connect = () => {
       ws = new WebSocket(wsUrl());
-      ws.onopen = () => setConnected(true);
-      ws.onmessage = (m) => {
-        const msg = JSON.parse(m.data);
-        if (msg.type === "status") setStatus(msg.status);
-      };
-      ws.onclose = () => {
-        setConnected(false);
-        if (!closed) timer = window.setTimeout(connect, 1500);
-      };
+      ws.onopen = () => setLinked(true);
+      ws.onmessage = (m) => { const msg = JSON.parse(m.data); if (msg.type === "status") setStatus(msg.status); };
+      ws.onclose = () => { setLinked(false); if (!closed) timer = window.setTimeout(connect, 1500); };
     };
     connect();
     api.status().then(setStatus).catch(() => {});
-    return () => { closed = true; window.clearTimeout(timer); ws?.close(); };
+    const f = setInterval(() => setFps(map.current?.fps() ?? 0), 1000);
+    return () => { closed = true; clearInterval(f); window.clearTimeout(timer); ws?.close(); };
   }, []);
 
-  // ---- pull layers when the world has actually advanced -------------------
-  const fetchLayers = useCallback(async (force = false) => {
-    if (!status) return;
-    const now = performance.now();
-    const lf = lastFetch.current;
-    const changed = status.calendar.tick !== lf.tick || layerKey !== lf.key || status.world_id !== lf.world;
-    if (!force && (!changed || now - lf.at < LAYER_REFRESH_MS)) return;
-    lastFetch.current = { tick: status.calendar.tick, at: now, key: layerKey, world: status.world_id };
+  const worldId = status?.world_id;
+  useEffect(() => { if (worldId !== undefined) api.dynamics().then((d) => setWindRows(d.wind_u_rows)).catch(() => {}); }, [worldId]);
+
+  // ---- view mode ------------------------------------------------------------------------------
+  const resMax = frame?.ranges[modeKey]?.[1];
+  const mode: ViewMode = useMemo(() => {
+    if (modeKey.startsWith("res_")) return { kind: "resource", layer: modeKey, style: resourceStyle(modeKey.slice(4), resMax ?? 1) };
+    if (modeKey !== "living") return { kind: "heatmap", layer: modeKey };
+    return { kind: "living" };
+  }, [modeKey, resMax]);
+
+  // ---- frames: pulled from the engine only when it has advanced --------------------------------
+  const pull = useCallback(async (force = false) => {
+    if (!status || fetching.current) return;
+    const lf = lastFrame.current, now = performance.now();
+    const changed = status.calendar.tick !== lf.tick || status.world_id !== lf.world || modeKey !== lf.key;
+    if (!force && (!changed || now - lf.at < FRAME_MS)) return;
+    fetching.current = true;
     try {
-      const [l, e, f] = await Promise.all([
-        api.layer(layerKey),
-        // elevation changes only through slow erosion: refresh every ~10 simulated days
-        !elevation || elevation.width !== status.width || status.calendar.tick - elevation.tick > 240 || elevation.tick > status.calendar.tick
-          ? api.layer("elevation") : Promise.resolve(elevation),
-        layerKey === "terrain" ? api.layer("fire") : Promise.resolve(null),
-      ]);
-      setLayer(l);
-      setElevation(e);
-      setFire(f);
-    } catch { /* server restarting; next status tick retries */ }
-  }, [status, layerKey, elevation]);
+      const names = new Set(LIVING_LAYERS);
+      if (modeKey !== "living") names.add(modeKey);
+      const elevStale = status.world_id !== lf.world || status.calendar.tick - lf.elevAt > 24 * 5 || status.calendar.tick < lf.elevAt;
+      if (elevStale) names.add("elevation");
+      const f = await api.frame([...names]);
+      lastFrame.current = { tick: f.tick, world: status.world_id, key: modeKey, at: now, elevAt: elevStale ? f.tick : lf.elevAt };
+      setFrame(f);
+    } catch { /* engine restarting */ } finally { fetching.current = false; }
+  }, [status, modeKey]);
 
-  useEffect(() => { fetchLayers(); }, [fetchLayers]);
-  useEffect(() => { fetchLayers(true); }, [layerKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { pull(); }, [pull]);
+  useEffect(() => { pull(true); }, [modeKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ---- daily data: stats, history, events ----------------------------------
-  useEffect(() => {
-    if (!status) return;
-    const d = lastDayFetch.current;
-    if (d.day === status.calendar.day_total && d.world === status.world_id) return;
-    lastDayFetch.current = { day: status.calendar.day_total, world: status.world_id };
+  // ---- daily data ------------------------------------------------------------------------------
+  const refreshDaily = useCallback(() => {
     api.stats().then(setStats).catch(() => {});
     api.history().then(setHistory).catch(() => {});
     api.events().then(setEvents).catch(() => {});
-  }, [status]);
-
-  // also refresh events/stats a few times a day at high resolution speeds
-  useEffect(() => {
-    const t = setInterval(() => {
-      api.events().then(setEvents).catch(() => {});
-      api.stats().then(setStats).catch(() => {});
-    }, 4000);
-    return () => clearInterval(t);
+    api.budgets().then((b) => setErrors(b.closure_errors)).catch(() => {});
   }, []);
+  useEffect(() => {
+    if (!status) return;
+    const d = lastDay.current;
+    if (d.day === status.calendar.day_total && d.world === status.world_id) return;
+    lastDay.current = { day: status.calendar.day_total, world: status.world_id };
+    refreshDaily();
+  }, [status, refreshDaily]);
 
-  const onStatus = (s: Status) => {
-    setStatus(s);
-    lastDayFetch.current = { day: -1, world: -1 };
+  const onStatus = (s: Status) => { setStatus(s); lastDay.current = { day: -1, world: -1 }; lastFrame.current.world = -1; };
+  const run = (p: Promise<Status>) => p.then((s) => { setErr(null); onStatus(s); }).catch((e) => setErr(e.message));
+
+  const tpd = status?.ticks_per_day ?? 24, dpy = status?.days_per_year ?? 360;
+  const nowTick = status?.calendar.tick ?? 0;
+  const markers = useMemo(() => events
+    .filter((e) => ["volcanic_eruption", "earthquake", "major_fire", "flood", "drought"].includes(e.kind))
+    .map((e) => ({ ...e, age: (nowTick - e.tick) / tpd })).filter((e) => e.age < 120), [events, nowTick, tpd]);
+
+  const locate = (x: number, y: number) => { setSelected({ x, y }); setTab("inspect"); map.current?.flyTo(x, y); };
+
+  const shoot = async () => {
+    const caption = `seed ${status?.seed} · W${status?.world_id} · ${status?.calendar.label} · ${modeKey === "living" ? "living view" : modeKey}`;
+    const blob = await map.current?.screenshot(caption);
+    if (!blob) return;
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `dwapar-seed${status?.seed}-tick${status?.calendar.tick}.png`;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 2000);
   };
 
-  const days = useMemo(() => history.map((h) => h.day), [history]);
-  const col = (fn: (s: Stats) => number | null | undefined) => history.map((h) => { const v = fn(h); return v ?? null; });
-  const first = history.length ? history[0] : null;
+  const days = history.map((h) => h.day);
+  const col = (fn: (s: Stats) => number | null | undefined) => history.map((h) => fn(h) ?? null);
+  const legend = mode.kind === "heatmap" ? HEATMAPS[mode.layer] : mode.kind === "resource" ? mode.style : null;
+  const c = status?.calendar;
+  const simHps = status?.running ? (status.speed_hours_per_second || status.measured_ticks_per_second) : 0;
 
   return (
-    <div className="app">
-      <header className="top">
+    <div className={`app ${drawer ? "" : "drawer-closed"}`}>
+      <MapStage ref={map} frame={frame} mode={mode} overlays={overlays} windRows={windRows} simHoursPerSecond={simHps}
+        selected={selected} markers={markers}
+        insets={{ left: 206, right: 352, top: 78, bottom: drawer ? 236 : 54 }} onSelect={(x, y) => { setSelected({ x, y }); setTab("inspect"); }} />
+
+      <header className="bar glass">
         <div className="brand">
-          <div className="brand-mark">
-            <span className="brand-en">DWAPAR</span>
-            <span className="brand-hi">द्वापर</span>
+          <div className="wordmark"><span className="en">DWAPAR</span><span className="hi">द्वापर</span></div>
+          <div className="tag-lines"><span>An Experiment in Digital Civilization</span><em>We create the world. They create the future.</em></div>
+        </div>
+        <div className="clock">
+          <div className="age"><span className="dim">WORLD AGE</span><b className="mono">{status ? status.world_age_years.toFixed(3) : "—"}</b><span className="dim">years</span></div>
+          <div className="date">
+            <div className="mono">{c?.label ?? "—"}</div>
+            <div className="sub"><i className={`dot ${status?.running ? "live" : ""}`} />{status?.running ? "running" : "paused"} · seed <span className="mono">{status?.seed}</span> · W{status?.world_id} · {status?.width}×{status?.height}</div>
           </div>
-          <div className="brand-sub">
-            <span>An Experiment in Digital Civilization</span>
-            <span className="motto">We create the world. They create the future.</span>
+          <div className="ctl">
+            {status?.running ? <button className="gold" onClick={() => run(api.control("pause"))}>❚❚ Pause</button>
+              : <button className="gold" onClick={() => run(api.control("resume"))}>▶ Run</button>}
+            <button disabled={status?.running} onClick={() => run(api.control("step", 1))} title="Advance one hour">+1h</button>
+            <button disabled={status?.running} onClick={() => run(api.control("step", 24))} title="Advance one day">+1d</button>
+            <div className="seg">{SPEEDS.map(([l, v]) => (
+              <button key={l} className={status?.speed_hours_per_second === v ? "on" : ""} onClick={() => run(api.speed(v))} title={v ? `${v} simulated hours per second` : "as fast as possible"}>{l}</button>
+            ))}</div>
           </div>
         </div>
-        <ClockPanel status={status} onChange={onStatus} />
-        <div className="station">
-          <div><span className="dim">STATION</span> Drishti · Phase 1</div>
-          <div><span className="dim">SEED</span> <span className="mono">{status?.seed ?? "—"}</span>
-            <span className="dim"> · W</span><span className="mono">{status?.world_id ?? "—"}</span>
-            <span className="dim"> · </span><span className="mono">{status ? `${status.width}×${status.height}` : ""}</span></div>
-          <div><span className={`dot ${connected ? "live" : "down"}`} />{connected ? "telemetry link" : "link lost — retrying"}</div>
+        <div className="tools">
+          <button onClick={shoot} title="Export a PNG of the current view">⤓ Capture</button>
+          <button onClick={() => setArchive(true)}>Archive</button>
+          <span className={`link-state ${linked ? "" : "down"}`}><i className={`dot ${linked ? "live" : "down"}`} />{linked ? "telemetry" : "reconnecting"}</span>
         </div>
       </header>
+      {(err || status?.error) && <div className="alert glass">{err ?? `Engine halted: ${status?.error}`}</div>}
 
-      <main className="grid">
-        <section className="map-col">
-          <div className="layers">
-            {LAYER_ORDER.map((k) => (
-              <button key={k} className={layerKey === k ? "on" : ""} onClick={() => setLayerKey(k)}>{LAYER_STYLES[k].label}</button>
+      <nav className="dock left glass">
+        <h3>Observe</h3>
+        <button className={`lv ${modeKey === "living" ? "on" : ""}`} onClick={() => setModeKey("living")}>◉ Living planet</button>
+        {GROUPS.map((g) => (
+          <div key={g} className="grp">
+            <h4>{g}</h4>
+            {Object.entries(HEATMAPS).filter(([, s]) => s.group === g).map(([k, s]) => (
+              <button key={k} className={modeKey === k ? "on" : ""} onClick={() => setModeKey(k)}>{s.label}</button>
             ))}
           </div>
-          <MapView layer={layer} elevation={elevation} fire={fire} layerKey={layerKey} selected={selected}
-            onSelect={(x, y) => setSelected({ x, y })} />
-          <div className="map-foot dim">
-            Scroll to zoom · drag to pan · click to inspect. Showing live engine state at tick{" "}
-            <span className="mono">{layer?.tick ?? "—"}</span>. No inhabitants exist in Phase 1.
-          </div>
-        </section>
+        ))}
+        <div className="grp">
+          <h4>Resources</h4>
+          {Object.keys(RESOURCE_NAMES).map((k) => (
+            <button key={k} className={modeKey === `res_${k}` ? "on" : ""} onClick={() => setModeKey(`res_${k}`)}>{RESOURCE_NAMES[k]}</button>
+          ))}
+        </div>
+        <h3>Overlays</h3>
+        <div className="toggles">
+          {([["clouds", "Clouds"], ["daynight", "Day / night"], ["rivers", "River flow"], ["weather", "Rain"], ["fire", "Fire & lava"], ["markers", "Disasters"], ["grid", "Grid"]] as [keyof Overlays, string][]).map(([k, l]) => (
+            <label key={k}><input type="checkbox" checked={overlays[k]} onChange={(e) => setOverlays({ ...overlays, [k]: e.target.checked })} />{l}</label>
+          ))}
+        </div>
+        <div className="zoom">
+          <button onClick={() => map.current?.zoom(1.5)}>+</button>
+          <button onClick={() => map.current?.zoom(1 / 1.5)}>−</button>
+          <button onClick={() => map.current?.fit()}>Fit</button>
+        </div>
+      </nav>
 
-        <aside className="side">
-          <Panel title="Tile inspector"><TileInspector sel={selected} tick={status?.calendar.tick ?? 0} /></Panel>
-          <Panel title="Environment"><EnvironmentPanel stats={stats} /></Panel>
-        </aside>
+      {legend && (
+        <div className="legend glass">
+          <div className="lt">{legend.label}</div>
+          <div className="lb" style={{ background: cssGradient(legend.stops) }} />
+          <div className="le"><span>{legend.legend[0]}</span><span>{legend.legend[1]}</span></div>
+        </div>
+      )}
 
-        <section className="bottom">
-          <Panel title="Historical record" right={<span className="dim small">{history.length} daily samples</span>}>
+      <aside className="dock right glass">
+        <div className="tabs">
+          {([["planet", "Planet"], ["inspect", "Inspector"], ["disasters", "Disasters"]] as const).map(([k, l]) => (
+            <button key={k} className={tab === k ? "on" : ""} onClick={() => setTab(k)}>{l}</button>
+          ))}
+        </div>
+        <div className="tab-body">
+          {tab === "planet" && <PlanetPanel status={status} stats={stats} first={history[0] ?? null} errors={errors} fps={fps} />}
+          {tab === "inspect" && <Inspector sel={selected} tick={nowTick} />}
+          {tab === "disasters" && <DisasterPanel events={events} tpd={tpd} dpy={dpy} onLocate={locate} />}
+        </div>
+      </aside>
+
+      <section className={`drawer glass ${drawer ? "open" : ""}`}>
+        <button className="handle" onClick={() => setDrawer(!drawer)}>{drawer ? "▾" : "▴"} World history</button>
+        {drawer && (
+          <>
+            <WorldTimeline events={events} tick={nowTick} tpd={tpd} dpy={dpy} onLocate={locate} />
             <div className="charts">
               <HistoryChart title="Temperature" unit="°C" x={days} series={[
-                { label: "land", color: "#e3a04f", values: col((h) => h.temp_land_mean) },
-                { label: "ocean", color: "#4aa3df", values: col((h) => h.temp_ocean_mean) },
-              ]} />
-              <HistoryChart title="Precipitation & soil" unit="" x={days} format={(v) => v.toFixed(2)} series={[
-                { label: "precip mm/d", color: "#6fb7ff", values: col((h) => h.precip_mean_mm_day) },
-                { label: "soil moisture×5", color: "#46d5c3", values: col((h) => h.soil_moisture_mean * 5) },
-              ]} />
-              <HistoryChart title="Vegetation" unit="" x={days} format={(v) => v.toFixed(3)} series={[
-                { label: "density", color: "#6cc070", values: col((h) => h.vegetation_mean) },
-                { label: "fertility", color: "#c9c35a", values: col((h) => h.fertility_mean) },
-              ]} />
-              <HistoryChart title="Fire & snow" unit="tiles" x={days} format={(v) => v.toFixed(0)} series={[
+                { label: "land", color: "#e9c46a", values: col((h) => h.temp_land_mean) },
+                { label: "ocean", color: "#5aa9d6", values: col((h) => h.sst_mean ?? h.temp_ocean_mean) }]} />
+              <HistoryChart title="Water" unit="" x={days} format={(v) => v.toFixed(2)} series={[
+                { label: "rain mm/d", color: "#7fb8ff", values: col((h) => h.precip_mean_mm_day) },
+                { label: "soil×5", color: "#46d5c3", values: col((h) => h.soil_moisture_mean * 5) },
+                { label: "aquifer m", color: "#9b8cff", values: col((h) => (h.groundwater_mean_mm ?? 0) / 1000) }]} />
+              <HistoryChart title="Biosphere" unit="" x={days} format={(v) => v.toFixed(3)} series={[
+                { label: "vegetation", color: "#7cc46a", values: col((h) => h.vegetation_mean) },
+                { label: "fertility", color: "#c9a24a", values: col((h) => h.fertility_mean) }]} />
+              <HistoryChart title="Fire · snow · lava" unit="tiles" x={days} format={(v) => v.toFixed(0)} series={[
                 { label: "burning", color: "#ff7a3d", values: col((h) => h.burning_tiles) },
-                { label: "snow", color: "#d7e3ee", values: col((h) => h.snow_tiles) },
-              ]} />
-              <HistoryChart title="Water stores" unit="km³" x={days} format={(v) => v.toFixed(1)} series={[
-                { label: "soil", color: "#b08a5a", values: col((h) => h.water_mm.soil * 4e-6) },
-                { label: "land surface", color: "#4aa3df", values: col((h) => h.water_mm.land_surface * 4e-6) },
-                { label: "atmosphere", color: "#a7b6c7", values: col((h) => h.water_mm.atmosphere * 4e-6) },
-                { label: "snow", color: "#e8eef4", values: col((h) => h.water_mm.snow * 4e-6) },
-              ]} />
+                { label: "snow", color: "#e6ecf2", values: col((h) => h.snow_tiles) },
+                { label: "lava", color: "#ff3d2e", values: col((h) => h.lava_tiles ?? 0) }]} />
               <HistoryChart title="Wood stock" unit="Mt" x={days} format={(v) => v.toFixed(0)} series={[
-                { label: "wood Mt", color: "#8fbf6a", values: col((h) => h.resources.wood / 1e6) },
-              ]} />
+                { label: "wood Mt", color: "#8fbf6a", values: col((h) => h.resources.wood / 1e6) }]} />
+              <HistoryChart title="Sediment in motion" unit="Mt" x={days} format={(v) => v.toFixed(2)} series={[
+                { label: "load Mt", color: "#c9a24a", values: col((h) => (h.sediment_in_transit_t ?? 0) / 1e6) }]} />
             </div>
-          </Panel>
-          <Panel title="Natural resources"><ResourcePanel stats={stats} first={first} /></Panel>
-          <Panel title="Natural event timeline">
-            <Timeline events={events} ticksPerDay={status?.ticks_per_day ?? 24} daysPerYear={status?.days_per_year ?? 360} onLocate={(x, y) => setSelected({ x, y })} />
-          </Panel>
-          <Panel title="World archive (Smriti)"><SaveLoad status={status} onChange={onStatus} /></Panel>
-        </section>
-      </main>
+          </>
+        )}
+      </section>
+
+      {archive && <Archive status={status} onChange={onStatus} onClose={() => setArchive(false)} />}
     </div>
   );
 }

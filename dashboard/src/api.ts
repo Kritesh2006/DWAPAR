@@ -26,6 +26,30 @@ export interface Status {
   burning_tiles: number;
   error: string | null;
   recovered_from_checkpoint: boolean;
+  world_age_years: number;
+  engine_version: string;
+}
+
+export interface Frame {
+  tick: number;
+  width: number;
+  height: number;
+  calendar: CalendarInfo;
+  layers: Record<string, Float32Array | Uint8Array>;
+  ranges: Record<string, [number, number]>;
+  receivedAt: number;
+}
+
+export interface Dynamics {
+  wind_u_rows: number[];
+  wind_v_rows: number[];
+}
+
+export interface WorldInfo {
+  id: number;
+  seed: number;
+  created_at: number;
+  latest_tick: number | null;
 }
 
 export interface Layer {
@@ -51,6 +75,13 @@ export interface Stats {
   vegetation_mean: number;
   burning_tiles: number;
   fire_ignitions_total: number;
+  sst_mean: number;
+  groundwater_mean_mm: number;
+  sediment_in_transit_t: number;
+  lava_tiles: number;
+  earthquakes_total: number;
+  eruptions_total: number;
+  budgets: Record<string, unknown>;
   snow_tiles: number;
   precip_mean_mm_day: number;
   water_mm: Record<string, number>;
@@ -115,9 +146,25 @@ export const api = {
   status: () => json<Status>("/api/status"),
   stats: () => json<Stats>("/api/stats"),
   history: () => json<Stats[]>("/api/stats/history?limit=1500"),
-  events: () => json<WorldEvent[]>("/api/events?limit=300"),
+  events: () => json<WorldEvent[]>("/api/events?limit=600"),
   tile: (x: number, y: number) => json<Tile>(`/api/tile/${x}/${y}`),
-  checkpoints: () => json<{ checkpoints: Checkpoint[] }>("/api/checkpoints"),
+  checkpoints: () => json<{ worlds: WorldInfo[]; checkpoints: Checkpoint[] }>("/api/checkpoints"),
+  budgets: () => json<{ closure_errors: Record<string, number>; budgets: Record<string, unknown> }>("/api/budgets"),
+  dynamics: () => json<Dynamics>("/api/dynamics"),
+  loadWorld: (world_id: number) => post<Status>("/api/load_world", { world_id }),
+  async frame(names: string[]): Promise<Frame> {
+    const r = await json<{
+      tick: number; width: number; height: number; calendar: CalendarInfo;
+      layers: Record<string, { dtype: string; data: string; min: number; max: number }>;
+    }>(`/api/frame?layers=${names.join(",")}`);
+    const layers: Frame["layers"] = {};
+    const ranges: Frame["ranges"] = {};
+    for (const [k, v] of Object.entries(r.layers)) {
+      layers[k] = decode(v.data, v.dtype);
+      ranges[k] = [v.min, v.max];
+    }
+    return { tick: r.tick, width: r.width, height: r.height, calendar: r.calendar, layers, ranges, receivedAt: performance.now() };
+  },
   control: (action: "start" | "pause" | "resume" | "step", ticks = 1) =>
     post<Status>("/api/control", { action, ticks }),
   speed: (hours_per_second: number) => post<Status>("/api/speed", { hours_per_second }),
