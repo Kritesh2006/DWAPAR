@@ -35,14 +35,14 @@ Status legend: ✅ done and tested · 🟡 partial · ⬜ not started
 | Integrity | Laws versioning; old checkpoints preserved; versions separated | ✅ | `test_laws_history_records_continuation`; `experiments/laws-1.5` unchanged |
 | 3D | Three.js world explorer from engine data | ✅ | Playwright `3D world renders the engine terrain with WebGL` |
 | 3D | Terrain textures, vegetation, water shaders, atmosphere, camera controls | ✅ | visual review (screenshots in JOURNAL) |
-| CI | GitHub Actions: Linux, Windows (incl. .bat scripts), dashboard | ✅ | see JOURNAL for the run ID and result |
+| CI | GitHub Actions: Linux, Windows (incl. .bat scripts), dashboard | ✅ | run 44626326913 green |
 | Tests | Automated dashboard tests (Vitest 9, Playwright 6) | ✅ | `npm run test:unit`, `npm run test:e2e` |
-| Experiment | Laws-1.6 runs: genesis seed2026-64 and continuation from laws-1.5 year 100 | 🟡 | EXPERIMENTS.md |
+| Experiment | Laws-1.6 runs: genesis seed2026-64 and continuation from laws-1.5 year 100 | 🟡 | both 110 years (100-y milestone ✅); 1,000 y pending |
 
 ## Last verified (session 4)
-- Engine: `pytest` **99 passed** (189 s, local); CI Linux and Windows jobs green.
+- Engine: `pytest` **99 passed** (189 s, local). CI run 44626326913 (`e1ed88a`): Linux, Windows (incl. .bat scripts) and dashboard jobs all green.
 - Dashboard: strict type-check and build clean; Vitest 9 passed; Playwright 6 passed (local);
-  CI dashboard job result recorded in JOURNAL.md.
+  Playwright 7 passed after the layout fix.
 
 ## Known issues / open items
 - 🟡 **Laws-1.5 sea surface was not level** (−10 … +113 m). Fixed in 1.6; laws-1.5 lake and

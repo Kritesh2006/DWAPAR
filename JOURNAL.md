@@ -112,3 +112,72 @@ glacier dynamics; dynamic sea level.
 - Improve spin-up length.
 - Run the `.bat` files on Windows.
 - Profile and optimise for 10,000-year runs.
+
+## Session 4 — 2026-11-19 · Laws 1.6, 3D world, CI
+
+**Owner's priorities:** glaciers; dynamic sea level; optimisation without losing determinism;
+Three.js 3D world; textures, water, atmosphere and camera; CI with dashboard tests; preserve
+checkpoints and separate experiments by laws version.
+
+**Implemented**
+- **Optimisation.** −21 % (A/B best-of-6, 128²: 6.93 → 5.45 ms/tick), proven **bit-identical**:
+  three golden fingerprints unchanged, plus oracle tests against verbatim 0.2 code. Compiled
+  kernels deferred (D-025).
+- **Laws 1.6.**
+  - Glacier ice: compaction, Glen-law flow, melt, sublimation, calving; GLACIER terrain.
+  - Daily sea level from ocean volume over the sea-floor hypsometry, with flooding/emerging coasts.
+  - Erosion grades to the moving sea.
+- **Versioning.** `laws.py`; `laws_history` per world; `laws_change` events.
+  `experiments/laws-1.5` moved verbatim (git history preserved) and frozen; `experiments/laws-1.6`
+  is new; continuation experiments via `start_from`; the report is per version and counts
+  milestones per laws.
+- **3D explorer** (Three.js r170, lazy-loaded):
+  - engine-elevation terrain with procedural detail, slope rock, beaches, snow and ice;
+  - ocean shader at the engine sea level using the real sea-floor depth;
+  - lakes, river-flow particles, instanced forests, fire and lava;
+  - physical sky with the sun from the engine's date, hour and latitude; cloud decks; moonlight;
+  - orbit, pan and zoom, WASD/QE flight, click-to-inspect, capture.
+- **CI** (GitHub Actions).
+  - Linux pytest.
+  - Windows: `setup.bat`, the engine tests, `start-headless.bat` and `start.bat` on a real Windows
+    runner.
+  - Dashboard: type-check, Vitest (9 tests), Playwright end-to-end (7 tests, real engine, WebGL).
+
+**What failed and was fixed**
+1. First glacier flow law (∝ H²) left thin ice immobile, so ice still accumulated. Replaced with
+   Glen-law H⁴·slope³ before any experiment.
+2. Report bugs: the continuation was credited with the 100-year milestone from world age, and seeds
+   showed "?" while runs were in progress. Fixed.
+3. The 3D cloud deck sliced through mountains at close range; it now fades near the camera.
+   The night scene was pitch black; representational moonlight added.
+4. A test caught my narrow-screen CSS hiding the motto (required branding).
+5. **CI caught a real layout bug the local tests missed:** with the CI machine's fonts the top bar
+   wrapped and covered the panel tabs. Panels are now positioned from the measured bar height;
+   a new test checks 1280/1440/1920 px.
+6. **Discovered while continuing the laws-1.5 world:** the laws-1.5 sea surface was not level
+   (−10 … +113 m), because ocean water equalised only diffusively. It inflated the 1.5
+   "lakes fill basins" finding. That finding is corrected in EXPERIMENTS.md.
+
+**Tested**
+- Engine: 99 passed (local).
+- Dashboard: build clean; Vitest 9 passed; Playwright 7 passed (local).
+- CI run 44626326913 on `e1ed88a`: all three jobs green (Linux, Windows scripts + tests,
+  dashboard).
+
+**Experiments (laws 1.6, physics commit 2498ae7):**
+- 110 years from genesis (seed 2026, 64²) and 110 years continuing the laws-1.5 year-100 world.
+- Frozen water converges to the same equilibrium (~9.5×10⁵ mm·tiles) from below and from above.
+- The sea is level to 10⁻¹² m.
+- Groundwater settles at ~338 mm in both runs.
+
+**Incomplete**
+- 1,000 and 10,000 years.
+- 128² laws-1.6 runs not started.
+- Connectivity-aware ocean.
+- Sub-tile 3D terrain detail.
+
+**Next**
+- Advance laws-1.6 experiments toward 1,000 years (~5.3 h per 64² run).
+- Profile again and consider compiled kernels with an explicit laws/engine note.
+- Connectivity-aware ocean.
+- 3D LOD and sub-tile detail.
