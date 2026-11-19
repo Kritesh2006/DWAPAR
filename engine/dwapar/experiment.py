@@ -7,7 +7,8 @@ The next session resumes from the latest checkpoint instead of restarting.
 Outputs (committed to the repository):
     experiments/results/<name>.jsonl   one JSON record per recorded simulated year
     experiments/status.json            progress of every experiment
-Checkpoints (local, not committed):
+    experiments/checkpoints/<name>.npz  latest state (portable; lets a fresh clone resume)
+Checkpoints (local working copies, not committed):
     data/experiments/<name>.sqlite
 
 Recording cadence: every year up to year 100, every 10 years to 1,000, every 100 beyond.
@@ -33,6 +34,7 @@ ROOT = Path(__file__).resolve().parents[2]
 RESULTS = ROOT / "experiments" / "results"
 STATUS = ROOT / "experiments" / "status.json"
 CKPT_DIR = ROOT / "data" / "experiments"
+PORTABLE = ROOT / "experiments" / "checkpoints"  # latest checkpoint per experiment, committed to git
 
 
 @dataclass
@@ -124,6 +126,28 @@ class YearAccumulator:
         }
 
 
+def _export_portable(name: str, sim: Simulation) -> None:
+    """Write the latest state as a single compressed file so a fresh clone can resume the run."""
+    from .smriti.store import _serialise
+    PORTABLE.mkdir(parents=True, exist_ok=True)
+    tmp = PORTABLE / f"{name}.npz.tmp"
+    tmp.write_bytes(_serialise(sim.world))
+    (PORTABLE / f"{name}.config.json").write_text(sim.cfg.to_json() + "\n")
+    tmp.replace(PORTABLE / f"{name}.npz")
+
+
+def _import_portable(name: str, store: Store) -> bool:
+    from .smriti.store import _deserialise
+    blob_path, cfg_path = PORTABLE / f"{name}.npz", PORTABLE / f"{name}.config.json"
+    if not (blob_path.exists() and cfg_path.exists()):
+        return False
+    cfg = WorldConfig.from_dict(json.loads(cfg_path.read_text()))
+    world = _deserialise(blob_path.read_bytes(), cfg)
+    wid = store.create_world(cfg)
+    store.save_checkpoint(wid, world, label="imported")
+    return True
+
+
 def _load_status() -> dict:
     if STATUS.exists():
         return json.loads(STATUS.read_text())
@@ -171,6 +195,8 @@ def run_experiment(spec: ExperimentSpec, budget_minutes: float, log=print) -> di
     CKPT_DIR.mkdir(parents=True, exist_ok=True)
     store = Store(CKPT_DIR / f"{spec.name}.sqlite")
     results_path = RESULTS / f"{spec.name}.jsonl"
+    if not store.list_checkpoints() and _import_portable(spec.name, store):
+        log(f"[{spec.name}] imported portable checkpoint from experiments/checkpoints/")
     try:
         sim = Simulation.from_checkpoint(store)
         if sim.cfg.seed != spec.seed or sim.cfg.width != spec.size:
@@ -230,6 +256,7 @@ def run_experiment(spec: ExperimentSpec, budget_minutes: float, log=print) -> di
                 fh.write(json.dumps(rec) + "\n")
             store.save_checkpoint(sim.world_id, sim.world, label="auto")
             store.prune_checkpoints(sim.world_id, keep=3)
+            _export_portable(spec.name, sim)
             if prev_wood and rec["wood_t"] < 0.5 * prev_wood:
                 entry["notes"].append(f"year {year}: wood fell >50% ({prev_wood:.3g} -> {rec['wood_t']:.3g} t)")
             prev_wood = rec["wood_t"]
@@ -264,6 +291,23 @@ DEFAULT_SUITE = [
     ExperimentSpec("seed7-128", 7, 128),
     ExperimentSpec("seed2026-64", 2026, 64),
 ]
+
+
+def export_only(names: Optional[list[str]], log=print) -> None:
+    """Refresh experiments/checkpoints/ from the local working stores without simulating."""
+    for spec in DEFAULT_SUITE:
+        if names and spec.name not in names:
+            continue
+        path = CKPT_DIR / f"{spec.name}.sqlite"
+        if not path.exists():
+            continue
+        store = Store(path)
+        try:
+            sim = Simulation.from_checkpoint(store)
+            _export_portable(spec.name, sim)
+            log(f"[{spec.name}] exported year {sim.world.tick // (sim.cfg.days_per_year * sim.cfg.ticks_per_day)}")
+        finally:
+            store.close()
 
 
 def run_suite(names: Optional[list[str]], budget_minutes: float, log=print) -> None:

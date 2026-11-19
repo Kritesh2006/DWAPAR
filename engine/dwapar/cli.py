@@ -92,9 +92,12 @@ def cmd_bench(args) -> None:
 
 
 def cmd_experiment(args) -> None:
-    from .experiment import run_suite
+    from .experiment import export_only, run_suite
 
-    run_suite(args.name or None, args.budget_minutes)
+    if args.export_only:
+        export_only(args.name or None)
+    else:
+        run_suite(args.name or None, args.budget_minutes)
 
 
 def main(argv=None) -> None:
@@ -120,6 +123,7 @@ def main(argv=None) -> None:
     ex = sub.add_parser("experiment", help="advance the long-term experiment suite (resumable)")
     ex.add_argument("--name", action="append", help="experiment name (repeatable); default: all")
     ex.add_argument("--budget-minutes", type=float, default=30.0)
+    ex.add_argument("--export-only", action="store_true", help="refresh committed portable checkpoints and exit")
     args = p.parse_args(argv)
     {"serve": cmd_serve, "run": cmd_run, "bench": cmd_bench, "experiment": cmd_experiment}[args.cmd](args)
 

@@ -115,3 +115,25 @@ def test_load_world_by_id(client):
     r = client.post("/api/load_world", json={"world_id": first}).json()
     assert r["world_id"] == first
     assert client.post("/api/load_world", json={"world_id": 999}).status_code == 404
+
+
+def test_experiment_resumes_from_portable_checkpoint(tmp_path, monkeypatch):
+    import dwapar.experiment as ex
+    monkeypatch.setattr(ex, "RESULTS", tmp_path / "results")
+    monkeypatch.setattr(ex, "STATUS", tmp_path / "status.json")
+    monkeypatch.setattr(ex, "CKPT_DIR", tmp_path / "ckpt")
+    monkeypatch.setattr(ex, "PORTABLE", tmp_path / "portable")
+    monkeypatch.setattr(ex, "record_interval", lambda year: 1)
+    spec = ex.ExperimentSpec("t", 3, 24, target_years=2)
+    first = ex.run_experiment(spec, budget_minutes=10, log=lambda *a: None)
+    assert first["state"] == "complete" and first["years_done"] == 2
+    lines = (tmp_path / "results" / "t.jsonl").read_text().splitlines()
+    assert len(lines) == 2
+    # A fresh clone has no local sqlite, only the committed portable checkpoint: it must resume, not restart.
+    import shutil
+    shutil.rmtree(tmp_path / "ckpt")
+    spec2 = ex.ExperimentSpec("t", 3, 24, target_years=3)
+    again = ex.run_experiment(spec2, budget_minutes=10, log=lambda *a: None)
+    assert again["years_done"] == 3
+    lines = (tmp_path / "results" / "t.jsonl").read_text().splitlines()
+    assert [__import__("json").loads(ln)["year"] for ln in lines] == [1, 2, 3]
