@@ -1,0 +1,42 @@
+{
+  "seed2026-64": {
+    "engine_versions": [
+      "2498ae7"
+    ],
+    "last_record": 110,
+    "laws_version": "1.6",
+    "ms_per_tick": 2.433,
+    "notes": [],
+    "spec": {
+      "name": "seed2026-64",
+      "seed": 2026,
+      "size": 64,
+      "start_from": null,
+      "target_years": 10000
+    },
+    "start_year": 0,
+    "state": "paused (stopped by signal; resumes from last checkpoint)",
+    "wall_s_total": 2562.3842050499998,
+    "years_done": 110
+  },
+  "seed2026-64-from-1.5-y100": {
+    "engine_versions": [
+      "2498ae7"
+    ],
+    "last_record": 210,
+    "laws_version": "1.6",
+    "ms_per_tick": 2.466,
+    "notes": [],
+    "spec": {
+      "name": "seed2026-64-from-1.5-y100",
+      "seed": 2026,
+      "size": 64,
+      "start_from": "experiments/laws-1.5/checkpoints/seed2026-64.npz",
+      "target_years": 10000
+    },
+    "start_year": 100,
+    "state": "paused (stopped by signal; resumes from last checkpoint)",
+    "wall_s_total": 2564.88379787,
+    "years_done": 210
+  }
+}
