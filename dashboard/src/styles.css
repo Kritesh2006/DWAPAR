@@ -184,3 +184,14 @@ table.res { width: 100%; border-collapse: collapse; font-size: 11.5px; }
   .legend { bottom: 330px; }
   .tag-lines { display: none; }
 }
+
+/* 3D world */
+.stage.three canvas { cursor: grab; outline: none; width: 100% !important; height: 100% !important; }
+.cam3d { position: absolute; left: 206px; bottom: 246px; display: flex; gap: 12px; align-items: center; flex-wrap: wrap;
+  padding: 6px 12px; border-radius: 4px; z-index: 3; font-size: 11px; max-width: calc(100% - 580px); }
+.cam3d label { display: flex; align-items: center; gap: 5px; color: #cfc6b2; }
+.cam3d input[type="range"] { accent-color: var(--gold); width: 90px; }
+.drawer-closed .cam3d { bottom: 64px; }
+.dimseg button { padding: 4px 10px; }
+
+@media (max-width: 1760px) { .tag-lines { display: none; } .clock { gap: 14px; } .age b { font-size: 19px; } }

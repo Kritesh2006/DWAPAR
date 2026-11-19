@@ -1,14 +1,18 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api, wsUrl, type Frame, type Stats, type Status, type WorldEvent } from "./api";
 import { HEATMAPS, RESOURCE_NAMES, cssGradient, resourceStyle } from "./colormaps";
 import HistoryChart from "./components/HistoryChart";
 import MapStage, { type MapHandle } from "./components/MapStage";
+import type { View3DHandle } from "./components/WorldView3D";
+
+// The 3D explorer (Three.js, ~500 kB) is loaded only when first opened.
+const WorldView3D = lazy(() => import("./components/WorldView3D"));
 import { Archive, DisasterPanel, Inspector, PlanetPanel } from "./components/Panels";
 import WorldTimeline from "./components/WorldTimeline";
 import type { Overlays, ViewMode } from "./render/Renderer";
 
 const LIVING_LAYERS = ["terrain", "vegetation", "moisture", "snow", "water", "flow", "flow_dir", "clouds", "rain",
-  "insolation", "fire", "lava", "temperature"];
+  "insolation", "fire", "lava", "temperature", "ice"];
 const FRAME_MS = 1000;
 const SPEEDS: [string, number][] = [["1h", 1], ["6h", 6], ["1d", 24], ["5d", 120], ["30d", 720], ["Max", 0]];
 const GROUPS = ["Environment", "Water", "Geology", "Hazards"] as const;
@@ -31,6 +35,9 @@ export default function App() {
   const [err, setErr] = useState<string | null>(null);
   const [fps, setFps] = useState(0);
   const map = useRef<MapHandle>(null);
+  const view3d = useRef<View3DHandle>(null);
+  const [dim, setDim] = useState<"2d" | "3d">(() => (localStorage.getItem("drishti.view") === "3d" ? "3d" : "2d"));
+  useEffect(() => { try { localStorage.setItem("drishti.view", dim); } catch { /* storage unavailable */ } }, [dim]);
   const fetching = useRef(false);
   const lastFrame = useRef({ tick: -1, world: -1, key: "", at: 0, elevAt: -1e9 });
   const lastDay = useRef({ day: -1, world: -1 });
@@ -46,7 +53,7 @@ export default function App() {
     };
     connect();
     api.status().then(setStatus).catch(() => {});
-    const f = setInterval(() => setFps(map.current?.fps() ?? 0), 1000);
+    const f = setInterval(() => setFps(view3d.current?.fps() ?? map.current?.fps() ?? 0), 1000);
     return () => { closed = true; clearInterval(f); window.clearTimeout(timer); ws?.close(); };
   }, []);
 
@@ -106,11 +113,13 @@ export default function App() {
     .filter((e) => ["volcanic_eruption", "earthquake", "major_fire", "flood", "drought"].includes(e.kind))
     .map((e) => ({ ...e, age: (nowTick - e.tick) / tpd })).filter((e) => e.age < 120), [events, nowTick, tpd]);
 
-  const locate = (x: number, y: number) => { setSelected({ x, y }); setTab("inspect"); map.current?.flyTo(x, y); };
+  const locate = (x: number, y: number) => {
+    setSelected({ x, y }); setTab("inspect"); map.current?.flyTo(x, y); view3d.current?.flyTo(x, y);
+  };
 
   const shoot = async () => {
     const caption = `seed ${status?.seed} · W${status?.world_id} · ${status?.calendar.label} · ${modeKey === "living" ? "living view" : modeKey}`;
-    const blob = await map.current?.screenshot(caption);
+    const blob = dim === "3d" ? await view3d.current?.screenshot() : await map.current?.screenshot(caption);
     if (!blob) return;
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
@@ -127,9 +136,17 @@ export default function App() {
 
   return (
     <div className={`app ${drawer ? "" : "drawer-closed"}`}>
-      <MapStage ref={map} frame={frame} mode={mode} overlays={overlays} windRows={windRows} simHoursPerSecond={simHps}
-        selected={selected} markers={markers}
-        insets={{ left: 206, right: 352, top: 78, bottom: drawer ? 236 : 54 }} onSelect={(x, y) => { setSelected({ x, y }); setTab("inspect"); }} />
+      {dim === "2d" ? (
+        <MapStage ref={map} frame={frame} mode={mode} overlays={overlays} windRows={windRows} simHoursPerSecond={simHps}
+          selected={selected} markers={markers}
+          insets={{ left: 206, right: 352, top: 78, bottom: drawer ? 236 : 54 }} onSelect={(x, y) => { setSelected({ x, y }); setTab("inspect"); }} />
+      ) : (
+        <Suspense fallback={<div className="stage-empty">Loading the 3D world…</div>}>
+          <WorldView3D ref={view3d} frame={frame} mode={mode} simHoursPerSecond={simHps}
+            windMean={windRows.length ? windRows.reduce((a, b) => a + b, 0) / windRows.length : 0}
+            onSelect={(x, y) => { setSelected({ x, y }); setTab("inspect"); }} />
+        </Suspense>
+      )}
 
       <header className="bar glass">
         <div className="brand">
@@ -140,7 +157,7 @@ export default function App() {
           <div className="age"><span className="dim">WORLD AGE</span><b className="mono">{status ? status.world_age_years.toFixed(3) : "—"}</b><span className="dim">years</span></div>
           <div className="date">
             <div className="mono">{c?.label ?? "—"}</div>
-            <div className="sub"><i className={`dot ${status?.running ? "live" : ""}`} />{status?.running ? "running" : "paused"} · seed <span className="mono">{status?.seed}</span> · W{status?.world_id} · {status?.width}×{status?.height}</div>
+            <div className="sub"><i className={`dot ${status?.running ? "live" : ""}`} />{status?.running ? "running" : "paused"} · seed <span className="mono">{status?.seed}</span> · W{status?.world_id} · {status?.width}×{status?.height} · laws {status?.laws_version ?? "—"} · sea {status ? `${status.sea_level_m >= 0 ? "+" : ""}${status.sea_level_m.toFixed(2)} m` : "—"}</div>
           </div>
           <div className="ctl">
             {status?.running ? <button className="gold" onClick={() => run(api.control("pause"))}>❚❚ Pause</button>
@@ -153,6 +170,10 @@ export default function App() {
           </div>
         </div>
         <div className="tools">
+          <div className="seg dimseg">
+            <button className={dim === "2d" ? "on" : ""} onClick={() => setDim("2d")} title="Flat observatory map">2D map</button>
+            <button className={dim === "3d" ? "on" : ""} onClick={() => setDim("3d")} title="Explore the world in 3D">3D world</button>
+          </div>
           <button onClick={shoot} title="Export a PNG of the current view">⤓ Capture</button>
           <button onClick={() => setArchive(true)}>Archive</button>
           <span className={`link-state ${linked ? "" : "down"}`}><i className={`dot ${linked ? "live" : "down"}`} />{linked ? "telemetry" : "reconnecting"}</span>
@@ -177,17 +198,17 @@ export default function App() {
             <button key={k} className={modeKey === `res_${k}` ? "on" : ""} onClick={() => setModeKey(`res_${k}`)}>{RESOURCE_NAMES[k]}</button>
           ))}
         </div>
-        <h3>Overlays</h3>
-        <div className="toggles">
+        {dim === "2d" && <h3>Overlays</h3>}
+        {dim === "2d" && <div className="toggles">
           {([["clouds", "Clouds"], ["daynight", "Day / night"], ["rivers", "River flow"], ["weather", "Rain"], ["fire", "Fire & lava"], ["markers", "Disasters"], ["grid", "Grid"]] as [keyof Overlays, string][]).map(([k, l]) => (
             <label key={k}><input type="checkbox" checked={overlays[k]} onChange={(e) => setOverlays({ ...overlays, [k]: e.target.checked })} />{l}</label>
           ))}
-        </div>
-        <div className="zoom">
+        </div>}
+        {dim === "2d" && <div className="zoom">
           <button onClick={() => map.current?.zoom(1.5)}>+</button>
           <button onClick={() => map.current?.zoom(1 / 1.5)}>−</button>
           <button onClick={() => map.current?.fit()}>Fit</button>
-        </div>
+        </div>}
       </nav>
 
       {legend && (

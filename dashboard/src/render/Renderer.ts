@@ -125,13 +125,14 @@ export class Renderer {
     if (m.kind === "heatmap") { heat = HEATMAPS[m.layer]; src = L[m.layer]; }
     if (m.kind === "resource") { heat = m.style; src = L[m.layer]; }
     for (let i = 0; i < w * h; i++) {
-      const e = elev ? elev[i] : 1;
+      const e = elev ? elev[i] - f.sea_level : 1; // height above the current sea level
       let c: [number, number, number];
       if (heat && src) c = heat.color(src[i], e);
       else c = naturalColor({
         elev: e, veg: (L.vegetation as Float32Array)?.[i] ?? 0, moist: (L.moisture as Float32Array)?.[i] ?? 0.3,
         snow: (L.snow as Float32Array)?.[i] ?? 0, water: (L.water as Float32Array)?.[i] ?? 0,
         flow: (L.flow as Float32Array)?.[i] ?? 0, lava: (L.lava as Float32Array)?.[i] ?? 0,
+        ice: (L.ice as Float32Array)?.[i] ?? 0,
       });
       const s = shade ? (heat ? 0.8 + 0.2 * shade[i] : shade[i]) : 1;
       img.data[i * 4] = Math.min(255, c[0] * s);
@@ -297,7 +298,7 @@ export class Renderer {
       if (cx < 0 || cy < 0 || cx >= f.width || cy >= f.height) { this.px[k] = -1; continue; }
       const i = cy * f.width + cx;
       const d = dir[i];
-      if (d === 0 || flow[i] < 0.3 || f.layers.elevation && (f.layers.elevation as Float32Array)[i] < 0) { this.px[k] = -1; continue; }
+      if (d === 0 || flow[i] < 0.3 || f.layers.elevation && (f.layers.elevation as Float32Array)[i] < f.sea_level) { this.px[k] = -1; continue; }
       const [dy, dx] = DIRS[d - 1];
       const speed = 0.6 + Math.log10(1 + flow[i] * 4) * 0.8; // tiles per real second (visual), direction = engine data
       const norm = Math.hypot(dx, dy);

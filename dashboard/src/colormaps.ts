@@ -4,13 +4,13 @@
 export type RGB = [number, number, number];
 
 export const TERRAIN_CLASSES = [
-  "ocean", "lake", "river", "wetland", "desert", "plains", "forest", "hills", "mountains", "snow",
+  "ocean", "lake", "river", "wetland", "desert", "plains", "forest", "hills", "mountains", "snow", "glacier",
 ] as const;
 
 export const TERRAIN_COLORS: Record<string, RGB> = {
   ocean: [16, 42, 66], lake: [36, 92, 122], river: [70, 140, 170], wetland: [70, 102, 82],
   desert: [201, 176, 128], plains: [142, 150, 92], forest: [44, 82, 48], hills: [130, 116, 86],
-  mountains: [122, 112, 104], snow: [232, 236, 240],
+  mountains: [122, 112, 104], snow: [232, 236, 240], glacier: [178, 214, 232],
 };
 
 export const lerp = (a: RGB, b: RGB, t: number): RGB => {
@@ -42,10 +42,12 @@ const WATER: RGB = [38, 104, 136];
 
 export interface NaturalInput {
   elev: number; veg: number; moist: number; snow: number; water: number; flow: number; lava: number;
+  ice?: number; sea?: number;
 }
 
 export function naturalColor(p: NaturalInput): RGB {
-  if (p.elev < 0) return ramp(SEA, p.elev);
+  const sea = p.sea ?? 0;
+  if (p.elev < sea) return ramp(SEA, p.elev - sea);
   let c = lerp(BARE_DRY, BARE_WET, p.moist * 1.3);
   const v = Math.min(1, p.veg * 1.6);
   c = lerp(c, lerp(GRASS, FOREST, Math.min(1, p.veg * 1.4)), v);
@@ -53,6 +55,7 @@ export function naturalColor(p: NaturalInput): RGB {
   if (p.water > 80) c = lerp(c, WATER, Math.min(1, Math.log10(p.water / 80) / 1.3));
   if (p.flow > 0.6) c = lerp(c, [64, 140, 168], Math.min(0.85, 0.35 + Math.log10(p.flow / 0.6) * 0.5));
   if (p.snow > 2) c = lerp(c, SNOW, Math.min(1, p.snow / 60));
+  if ((p.ice ?? 0) > 50) c = lerp(c, [196, 226, 240], Math.min(1, (p.ice ?? 0) / 1500));
   if (p.lava > 0.02) c = lerp(c, [40, 20, 16], Math.min(1, p.lava * 1.5)); // fresh basalt
   return c;
 }
@@ -97,6 +100,7 @@ export const HEATMAPS: Record<string, HeatStyle> = {
   elevation: { label: "Elevation", group: "Geology", legend: ["sea", "4000 m"], stops: ELEV_LAND, color: (v) => (v < 0 ? ramp(SEA, v) : ramp(ELEV_LAND, v)), format: (v) => `${v.toFixed(0)} m` },
   moisture: { label: "Soil moisture", group: "Water", legend: ["dry", "saturated"], stops: MOIST, color: land((v) => ramp(MOIST, v)), format: (v) => v.toFixed(2) },
   water: { label: "Surface water", group: "Water", legend: ["0", "≥10 m"], stops: BLUES, color: (v, e) => (e < 0 ? [12, 30, 62] : ramp(BLUES, logN(v, 4))), format: (v) => `${big(v)} mm` },
+  ice: { label: "Glacier ice", group: "Water", legend: ["0", "≥100 m w.e."], stops: BLUES, color: land((v) => ramp(BLUES, logN(v, 5))), format: (v) => `${(v / 1000).toFixed(2)} m w.e.` },
   groundwater: { label: "Groundwater", group: "Water", legend: ["0", "3000 mm"], stops: BLUES, color: land((v) => ramp(BLUES, v / 3000)), format: (v) => `${v.toFixed(0)} mm` },
   flow: { label: "River discharge", group: "Water", legend: ["0", "≥1000 mm/h"], stops: BLUES, color: land((v) => ramp(BLUES, logN(v, 3))), format: (v) => `${v.toFixed(2)} mm/h` },
   snow: { label: "Snowpack", group: "Water", legend: ["0", "400 mm"], stops: BLUES, color: land((v) => ramp(BLUES, v / 400)), format: (v) => `${v.toFixed(1)} mm` },

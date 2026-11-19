@@ -28,6 +28,8 @@ export interface Status {
   recovered_from_checkpoint: boolean;
   world_age_years: number;
   engine_version: string;
+  sea_level_m: number;
+  laws_version: string | null;
 }
 
 export interface Frame {
@@ -35,6 +37,11 @@ export interface Frame {
   width: number;
   height: number;
   calendar: CalendarInfo;
+  sea_level: number;
+  tile_size_m: number;
+  lat_top: number;
+  lat_bottom: number;
+  days_per_year: number;
   layers: Record<string, Float32Array | Uint8Array>;
   ranges: Record<string, [number, number]>;
   receivedAt: number;
@@ -154,7 +161,8 @@ export const api = {
   loadWorld: (world_id: number) => post<Status>("/api/load_world", { world_id }),
   async frame(names: string[]): Promise<Frame> {
     const r = await json<{
-      tick: number; width: number; height: number; calendar: CalendarInfo;
+      tick: number; width: number; height: number; calendar: CalendarInfo; sea_level: number; tile_size_m: number;
+      lat_top: number; lat_bottom: number; days_per_year: number;
       layers: Record<string, { dtype: string; data: string; min: number; max: number }>;
     }>(`/api/frame?layers=${names.join(",")}`);
     const layers: Frame["layers"] = {};
@@ -163,7 +171,9 @@ export const api = {
       layers[k] = decode(v.data, v.dtype);
       ranges[k] = [v.min, v.max];
     }
-    return { tick: r.tick, width: r.width, height: r.height, calendar: r.calendar, layers, ranges, receivedAt: performance.now() };
+    return { tick: r.tick, width: r.width, height: r.height, calendar: r.calendar, sea_level: r.sea_level,
+      tile_size_m: r.tile_size_m, lat_top: r.lat_top, lat_bottom: r.lat_bottom, days_per_year: r.days_per_year,
+      layers, ranges, receivedAt: performance.now() };
   },
   control: (action: "start" | "pause" | "resume" | "step", ticks = 1) =>
     post<Status>("/api/control", { action, ticks }),

@@ -46,6 +46,7 @@ LAYERS = {
     "groundwater": ("groundwater", "mm"),
     "sediment": ("sediment", "t"),
     "lava": ("lava", "0–1"),
+    "ice": ("ice", "mm w.e."),
     "clouds": ("cloud_cover", "0–1"),
     "rain": ("last_precip", "mm/h"),
     "insolation": ("last_insolation", "0–1"),
@@ -156,6 +157,8 @@ def create_app(db_path: str | Path = "data/dwapar.sqlite", default_cfg: Optional
                 "burning_tiles": int((sim.world.f["fire"] > 0).sum()),
                 "error": o.runner.error,
                 "world_age_years": sim.world.tick / (sim.cfg.ticks_per_day * sim.cfg.days_per_year),
+                "sea_level_m": sim.world.sea_level,
+                "laws_version": sim.world.meta.get("laws_version"),
                 "engine_version": __import__("dwapar").__version__,
                 "recovered_from_checkpoint": o.recovered,
             }
@@ -196,7 +199,9 @@ def create_app(db_path: str | Path = "data/dwapar.sqlite", default_cfg: Optional
         sim = obs().sim
         with sim.lock:
             frame = {"tick": sim.world.tick, "width": sim.cfg.width, "height": sim.cfg.height,
-                     "calendar": sim.calendar.to_dict(), "layers": {}}
+                     "calendar": sim.calendar.to_dict(), "sea_level": sim.world.sea_level,
+                     "tile_size_m": sim.cfg.tile_size_m, "lat_top": sim.cfg.lat_top,
+                     "lat_bottom": sim.cfg.lat_bottom, "days_per_year": sim.cfg.days_per_year, "layers": {}}
             for n in names:
                 try:
                     frame["layers"][n] = encode(np.array(layer_array(obs(), n)))
