@@ -79,14 +79,22 @@ def mfd_flow(height: np.ndarray, available: np.ndarray, fraction: float, scale: 
     Each cell sends water (or any conserved quantity) to *all* lower neighbours with weights
     ∝ slope**exponent. The total outflow M is capped so that no neighbour receives more
     than ``fraction`` of the height difference to it (×``scale`` converts metres to the
-    quantity's unit): this guarantees no pairwise overshoot and therefore no oscillation.
+    quantity's unit): this guarantees no pairwise overshoot.
+
+    Implementation note (engine 0.3): neighbours are read as views into one +inf-padded copy and
+    inflows are accumulated into one zero-padded buffer, instead of allocating a shifted copy per
+    direction. The arithmetic and its order are unchanged, so results are bit-identical to the
+    0.2 implementation (``tests/test_performance.py`` checks this against a reference copy).
 
     Returns (delta field, outflow per cell). Nothing leaves the map edges.
     """
+    h, w = height.shape
+    hp = np.full((h + 2, w + 2), np.inf)
+    hp[1:-1, 1:-1] = height
     drops = []
     weights = []
     for dy, dx, dist in NEIGHBOURS:
-        nb = neighbour(height, dy, dx, np.inf)
+        nb = hp[1 + dy:1 + dy + h, 1 + dx:1 + dx + w]
         d = np.maximum(height - nb, 0.0)
         drops.append(d)
         weights.append((d / (dist * tile_size_m)) ** exponent)
@@ -94,16 +102,21 @@ def mfd_flow(height: np.ndarray, available: np.ndarray, fraction: float, scale: 
     has = total_w > 0
     safe_total = np.where(has, total_w, 1.0)
     ratio = np.full(height.shape, np.inf)
+    fractions = []
+    tmp = np.empty(height.shape)
     for d, wgt in zip(drops, weights):
         wi = wgt / safe_total
-        ratio = np.where(wi > 0, np.minimum(ratio, d / np.where(wi > 0, wi, 1.0)), ratio)
+        fractions.append(wi)
+        pos = wi > 0
+        np.divide(d, wi, out=tmp, where=pos)
+        np.minimum(ratio, tmp, out=ratio, where=pos)
     cap = np.where(has, fraction * ratio * scale, 0.0)
     out = np.minimum(available, cap)
-    delta = -out
-    for (dy, dx, _), wgt in zip(NEIGHBOURS, weights):
-        flow_i = out * (wgt / safe_total)
-        delta = delta + neighbour(flow_i, -dy, -dx, 0.0)
-    return delta, out
+    acc = np.zeros((h + 2, w + 2))
+    acc[1:-1, 1:-1] = -out
+    for (dy, dx, _), wi in zip(NEIGHBOURS, fractions):
+        acc[1 + dy:1 + dy + h, 1 + dx:1 + dx + w] += out * wi
+    return acc[1:-1, 1:-1].copy(), out
 
 
 def advect_periodic(a: np.ndarray, u: np.ndarray, v: np.ndarray) -> np.ndarray:

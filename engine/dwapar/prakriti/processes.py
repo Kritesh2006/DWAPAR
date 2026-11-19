@@ -97,7 +97,11 @@ class Prakriti:
         cfg = world.cfg
         self.cfg = cfg
         self.lat_rad = np.deg2rad(world.f["latitude"])
+        # Latitude varies only by row, so solar geometry is evaluated on one column and broadcast
+        # (identical values, ~128× less trigonometry).
+        self.lat_col = self.lat_rad[:, :1].copy()
         self.q_ann = annual_mean_insolation(self.lat_rad, cfg.days_per_year)
+        self.q_ann_col = annual_mean_insolation(self.lat_col, cfg.days_per_year)
         lat_row = world.f["latitude"][:, :1]
         base = cfg.wind_speed_tiles_per_hour * cfg.hours_per_tick
         blend = np.tanh((np.abs(lat_row) - 25.0) / 6.0)  # -1 deep tropics .. +1 mid-latitudes
@@ -106,7 +110,12 @@ class Prakriti:
         self._weather_cache: dict[int, np.ndarray] = {}
         self.tile_area = cfg.tile_size_m ** 2
         self.last_precip = np.zeros(world.shape)   # visual/diagnostic only (not state)
-        self.last_insolation = np.zeros(world.shape)
+        self._last_insol_col = np.zeros((cfg.height, 1))
+
+    @property
+    def last_insolation(self) -> np.ndarray:
+        """Instantaneous insolation of the last hour, full grid (diagnostic only)."""
+        return np.broadcast_to(self._last_insol_col, (self.cfg.height, self.cfg.width)).copy()
 
     # ------------------------------------------------------------------ utils
     def weather(self, day_total: int) -> np.ndarray:
@@ -126,7 +135,7 @@ class Prakriti:
 
     def seasonal_equilibrium(self, w: World, doy: float, ocean: np.ndarray) -> np.ndarray:
         lag = self.cfg.days_per_year / 8.0
-        q_day = daily_mean_insolation(self.lat_rad, doy - lag, self.cfg.days_per_year)
+        q_day = daily_mean_insolation(self.lat_col, doy - lag, self.cfg.days_per_year)
         t_ann = -38.0 + 210.0 * self.q_ann
         amp = np.where(ocean, 45.0, 95.0)
         return t_ann + amp * (q_day - self.q_ann) - LAPSE_RATE * np.maximum(w.f["elevation"], 0.0)
@@ -160,9 +169,9 @@ class Prakriti:
 
         # 1. Radiation, ocean mixed layer, heat transport, air temperature --------
         doy = cal.day_of_year + cal.hour / 24.0
-        insol = instantaneous_insolation(self.lat_rad, doy, cal.hour, cfg.days_per_year)
-        self.last_insolation = insol
-        q_today = daily_mean_insolation(self.lat_rad, doy, cfg.days_per_year)
+        insol = instantaneous_insolation(self.lat_col, doy, cal.hour, cfg.days_per_year)
+        self._last_insol_col = insol
+        q_today = daily_mean_insolation(self.lat_col, doy, cfg.days_per_year)
         t_season = self.seasonal_equilibrium(w, doy, ocean)
 
         # Ocean: relax toward radiative equilibrium, exchange with air, carried by currents.
@@ -270,13 +279,23 @@ class Prakriti:
         storm = np.clip(f["atmo_water"] / saturation_capacity_mm(f["temperature"]), 0, 1)
         p_ign = LIGHTNING_P_H * dt * risk * (0.3 + storm)
         ignite = (rng.random(risk.shape) < p_ign) & ~burning
-        spread_p = np.zeros_like(risk)
-        for dy, dx, dist in NEIGHBOURS:
-            src = neighbour(f["fire"], -dy, -dx, 0.0)
-            wind_bonus = 1.0 + 0.6 * np.sign(dx) * np.sign(self.wind_u)
-            spread_p = 1 - (1 - spread_p) * (1 - np.clip(SPREAD_P_H * dt * src * wind_bonus / dist, 0, 1))
-        spread = (rng.random(risk.shape) < spread_p * risk * 3.0) & ~burning
-        new = ignite | spread
+        if was_burning:
+            spread_p = np.zeros_like(risk)
+            for dy, dx, dist in NEIGHBOURS:
+                src = neighbour(f["fire"], -dy, -dx, 0.0)
+                wind_bonus = 1.0 + 0.6 * np.sign(dx) * np.sign(self.wind_u)
+                spread_p = 1 - (1 - spread_p) * (1 - np.clip(SPREAD_P_H * dt * src * wind_bonus / dist, 0, 1))
+            spread = (rng.random(risk.shape) < spread_p * risk * 3.0) & ~burning
+            new = ignite | spread
+        else:
+            # Nothing burning: spread probability is identically zero (the per-tick generator is not
+            # used again this tick, so skipping its second draw changes no other random number).
+            new = ignite
+        if not new.any() and not was_burning:
+            meta = w.meta
+            meta["burned_tile_hours"] = meta.get("burned_tile_hours", 0)
+            meta["fire_ignitions"] = meta.get("fire_ignitions", 0)
+            return 0
         for y, x in zip(*np.nonzero(ignite)):
             events.append({"tick": cal.tick, "kind": "fire_ignition", "x": int(x), "y": int(y),
                            "message": f"Lightning ignited a fire at ({x}, {y}); risk {risk[y, x]:.2f}"})
