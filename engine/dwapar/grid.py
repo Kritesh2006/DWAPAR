@@ -70,3 +70,66 @@ def neighbour_mean(a: np.ndarray) -> np.ndarray:
         acc += np.where(ok, nb, 0.0)
         cnt += ok
     return acc / np.maximum(cnt, 1)
+
+
+def mfd_flow(height: np.ndarray, available: np.ndarray, fraction: float, scale: float,
+             tile_size_m: float, exponent: float = 4.0) -> tuple[np.ndarray, np.ndarray]:
+    """Multiple-flow-direction routing (Freeman/Holmgren style), exactly mass-conserving.
+
+    Each cell sends water (or any conserved quantity) to *all* lower neighbours with weights
+    ∝ slope**exponent. The total outflow M is capped so that no neighbour receives more
+    than ``fraction`` of the height difference to it (×``scale`` converts metres to the
+    quantity's unit): this guarantees no pairwise overshoot and therefore no oscillation.
+
+    Returns (delta field, outflow per cell). Nothing leaves the map edges.
+    """
+    drops = []
+    weights = []
+    for dy, dx, dist in NEIGHBOURS:
+        nb = neighbour(height, dy, dx, np.inf)
+        d = np.maximum(height - nb, 0.0)
+        drops.append(d)
+        weights.append((d / (dist * tile_size_m)) ** exponent)
+    total_w = np.sum(weights, axis=0)
+    has = total_w > 0
+    safe_total = np.where(has, total_w, 1.0)
+    ratio = np.full(height.shape, np.inf)
+    for d, wgt in zip(drops, weights):
+        wi = wgt / safe_total
+        ratio = np.where(wi > 0, np.minimum(ratio, d / np.where(wi > 0, wi, 1.0)), ratio)
+    cap = np.where(has, fraction * ratio * scale, 0.0)
+    out = np.minimum(available, cap)
+    delta = -out
+    for (dy, dx, _), wgt in zip(NEIGHBOURS, weights):
+        flow_i = out * (wgt / safe_total)
+        delta = delta + neighbour(flow_i, -dy, -dx, 0.0)
+    return delta, out
+
+
+def advect_periodic(a: np.ndarray, u: np.ndarray, v: np.ndarray) -> np.ndarray:
+    """Conservative first-order upwind advection on a periodic grid (|u|,|v| < 1 cell/step)."""
+    out_e, out_w = np.maximum(u, 0) * a, np.maximum(-u, 0) * a
+    out_s, out_n = np.maximum(v, 0) * a, np.maximum(-v, 0) * a
+    a = a - out_e - out_w - out_s - out_n
+    a = a + np.roll(out_e, 1, axis=1) + np.roll(out_w, -1, axis=1)
+    return a + np.roll(out_s, 1, axis=0) + np.roll(out_n, -1, axis=0)
+
+
+def advect_masked(a: np.ndarray, u: np.ndarray, v: np.ndarray, mask: np.ndarray, diffusion: float) -> np.ndarray:
+    """Upwind *advective-form* transport of an intensive scalar (e.g. temperature) plus diffusion,
+    restricted to faces between two cells of ``mask``.
+
+    Surface currents that stop at coastlines are not divergence-free, so the flux form would pile
+    heat against coasts; the advective form keeps a uniform field uniform. Diffusion uses the
+    flux form and conserves the masked total exactly."""
+    m = mask.astype(float)
+    res = a.copy()
+    for dy, dx, vel in ((0, -1, np.maximum(u, 0)), (0, 1, np.maximum(-u, 0)),
+                        (-1, 0, np.maximum(v, 0)), (1, 0, np.maximum(-v, 0))):
+        # (dy, dx) points at the *upstream* neighbour for that velocity sign
+        open_face = m * neighbour(m, dy, dx, 0.0)
+        res = res - vel * open_face * (a - neighbour(a, dy, dx, 0.0))
+    for dy, dx in ((0, 1), (0, -1), (1, 0), (-1, 0)):
+        open_face = m * neighbour(m, dy, dx, 0.0)
+        res = res + diffusion * open_face * (neighbour(a, dy, dx, 0.0) - a)
+    return res

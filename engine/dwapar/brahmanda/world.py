@@ -18,6 +18,14 @@ Units (documented in WORLD_LAWS.md):
     temp_ema         °C temperature (slow moving average, ~1 season)
     temp_day         °C temperature (fast moving average, ~1 day)
     precip_today     mm precipitation accumulated since local midnight
+    groundwater      mm water stored in the aquifer (below the soil column)
+    sediment         t loose sediment in transit on the tile (eroded, not yet deposited)
+    sst              °C ocean mixed-layer temperature (meaningful on ocean tiles)
+    tectonic_stress  0.. accumulated elastic strain at plate boundaries (released by earthquakes)
+    lava             0..1 heat of recently erupted lava (decays as it cools)
+  static (fixed at generation, recomputable from config):
+    plate_id, uplift_rate (m/yr), stress_rate, volcano (0..1 vent strength),
+    aquifer_capacity (mm), current_u/current_v (ocean current, tiles/hour)
 """
 
 from __future__ import annotations
@@ -59,13 +67,19 @@ DYNAMIC_FIELDS = (
     "temp_ema",
     "temp_day",
     "precip_today",
+    "groundwater",
+    "sediment",
+    "sst",
+    "tectonic_stress",
+    "lava",
 )
 
 #: Finite, nonrenewable deposits (tonnes per tile). Only extraction may reduce them.
 MINERAL_FIELDS = ("stone", "sand", "clay", "iron_ore", "copper_ore", "coal")
 
 #: Static properties fixed at generation.
-STATIC_FIELDS = ("field_capacity", "latitude")
+STATIC_FIELDS = ("field_capacity", "latitude", "plate_id", "uplift_rate", "stress_rate", "volcano",
+                 "aquifer_capacity", "current_u", "current_v")
 
 ALL_FLOAT_FIELDS = DYNAMIC_FIELDS + MINERAL_FIELDS + STATIC_FIELDS
 
@@ -73,7 +87,11 @@ ALL_FLOAT_FIELDS = DYNAMIC_FIELDS + MINERAL_FIELDS + STATIC_FIELDS
 NON_NEGATIVE = (
     "surface_water", "soil_water", "atmo_water", "snow", "biomass", "organic_matter",
     "fire", "drought_days", "flow_flux", "precip_ema", "precip_today", "field_capacity",
+    "groundwater", "sediment", "tectonic_stress", "lava", "volcano", "aquifer_capacity",
 ) + MINERAL_FIELDS
+
+#: Bulk density used to convert eroded/deposited/erupted volume (m³) to mass (t).
+ROCK_DENSITY_T_M3 = 2.0
 
 
 class InvalidStateError(RuntimeError):

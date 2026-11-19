@@ -38,6 +38,8 @@ class WorldConfig:
     #: Prevailing wind direction (degrees, direction wind blows TOWARD; 90 = east).
     wind_dir_deg: float = 80.0
     wind_speed_tiles_per_hour: float = 0.35
+    #: Pre-history spin-up: simulated days sampled in each season before tick 0 (0 disables).
+    spinup_days_per_season: int = 6
 
     extra: dict = field(default_factory=dict)
 
@@ -65,6 +67,8 @@ class WorldConfig:
             raise ConfigError("physical scales must be positive")
         if self.checkpoint_every_days < 0 or self.checkpoint_retain < 1:
             raise ConfigError("invalid checkpoint settings")
+        if not (0 <= self.spinup_days_per_season <= 90):
+            raise ConfigError("spinup_days_per_season must be in [0, 90]")
         if not (0 <= self.wind_speed_tiles_per_hour <= 1.0):
             raise ConfigError("wind speed must be in [0, 1] tiles/hour (CFL stability)")
 

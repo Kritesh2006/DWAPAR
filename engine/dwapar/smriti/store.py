@@ -81,9 +81,32 @@ def _serialise(world: World) -> bytes:
     return buf.getvalue()
 
 
+def _upgrade_fields(fields: dict, cfg: WorldConfig) -> list[str]:
+    """Fill fields introduced after a checkpoint was written (engine 0.1 → 0.2).
+
+    Static geology is a pure function of the config, so it is recomputed exactly; new
+    dynamic stores start empty (groundwater, sediment, stress, lava) or from the nearest
+    existing quantity (ocean temperature ← air temperature)."""
+    missing = [n for n in ALL_FLOAT_FIELDS if n not in fields]
+    if not missing:
+        return []
+    from ..brahmanda.tectonics import build_static
+    static = build_static(cfg, fields["elevation"])
+    zeros = np.zeros_like(fields["elevation"])
+    for name in missing:
+        if name in static:
+            fields[name] = static[name]
+        elif name == "sst":
+            fields[name] = fields["temperature"].copy()
+        else:
+            fields[name] = zeros.copy()
+    return missing
+
+
 def _deserialise(blob: bytes, cfg: WorldConfig) -> World:
     with np.load(io.BytesIO(blob), allow_pickle=False) as z:
-        fields = {name: z[name] for name in ALL_FLOAT_FIELDS}
+        fields = {name: z[name] for name in ALL_FLOAT_FIELDS if name in z.files}
+        _upgrade_fields(fields, cfg)
         terrain = z["terrain"]
         tick = int(z["__tick"][0])
         meta = json.loads(bytes(z["__meta"]).decode()) if "__meta" in z.files else {}

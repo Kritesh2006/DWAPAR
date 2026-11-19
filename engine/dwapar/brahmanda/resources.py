@@ -3,8 +3,11 @@
 Renewable resources are *views* of physical state, so they regenerate only
 when the physics allows it (wood = living biomass grows only with warmth,
 water and fertile soil; freshwater is replenished only by precipitation).
-Nonrenewable deposits are separate finite fields that nothing in Phase 1
-increases; ``extract`` is the only operation that may reduce them.
+Metal ores and coal are finite: nothing increases them and only ``extract``
+reduces them. Stone, sand and clay are finite on human timescales but are
+reworked by geology: erosion removes sand/clay, deposition of transported
+sediment adds sand/clay, and eruptions add stone (lava) and clay (ash). Every
+such change is counted in ``world.meta`` so the budget can be audited.
 """
 
 from __future__ import annotations
@@ -15,6 +18,8 @@ from .world import MINERAL_FIELDS, World
 
 RENEWABLE = ("freshwater", "wood", "organic_matter")
 NONRENEWABLE = MINERAL_FIELDS
+NEVER_INCREASING = ("iron_ore", "copper_ore", "coal")
+GEOLOGICAL = ("stone", "sand", "clay")
 FINITE_RESERVOIR = ("saltwater",)  # practically unlimited but still measured
 ALL_RESOURCES = ("freshwater", "saltwater", "wood", "stone", "sand", "clay", "iron_ore", "copper_ore", "coal",
                  "organic_matter")
@@ -40,7 +45,7 @@ def resource_field(world: World, name: str) -> np.ndarray:
     f, area = world.f, tile_area_m2(world)
     land = ~world.is_ocean
     if name == "freshwater":
-        mm = (f["surface_water"] + f["soil_water"] + f["snow"]) * land
+        mm = (f["surface_water"] + f["soil_water"] + f["snow"] + f["groundwater"]) * land
         return mm / 1000.0 * area
     if name == "saltwater":
         return f["surface_water"] * world.is_ocean / 1000.0 * area
@@ -84,7 +89,7 @@ def extract(world: World, name: str, y: int, x: int, amount: float) -> float:
         f["organic_matter"][y, x] = max(f["organic_matter"][y, x] - take * 1000.0 / area, 0.0)
     elif name in ("freshwater", "saltwater"):
         mm = take / area * 1000.0
-        order = ("surface_water",) if name == "saltwater" else ("surface_water", "soil_water", "snow")
+        order = ("surface_water",) if name == "saltwater" else ("surface_water", "soil_water", "snow", "groundwater")
         for store in order:
             d = min(mm, f[store][y, x])
             f[store][y, x] -= d

@@ -130,13 +130,14 @@ def test_snow_accumulates_when_cold_and_melts_when_warm(sim):
     from dwapar.kala.calendar import Calendar
     w = sim.world
     y, x = land_tile(sim)
-    w.f["atmo_water"][y, x] = 300.0
-    w.f["temperature"][y, x] = -10.0
+    # Whole air mass is cold (a single cold tile would now be mixed away by wind heat transport).
+    w.f["atmo_water"][y - 1:y + 2, x - 1:x + 2] = 300.0
+    w.f["temperature"][:] = -15.0
     sim.prakriti.step_hour(w, Calendar.at(0, w.cfg), [])
     assert w.snow[y, x] > 0
     snow = w.snow[y, x]
-    w.f["temperature"][y, x] = 15.0
-    w.f["atmo_water"][y, x] = 0.0
+    w.f["temperature"][:] = 15.0
+    w.f["atmo_water"][:] = 0.0
     # temperature relaxes toward equilibrium within the step; still well above 0 °C after one step
     sim.prakriti.step_hour(w, Calendar.at(14, w.cfg), [])
     assert w.snow[y, x] < snow
@@ -154,12 +155,19 @@ def test_water_flows_downhill(sim):
     assert w.surface_water[y, x] < 500.0 - 8.0  # more left than infiltration alone can remove
 
 
-def test_erosion_conserves_mass(sim):
+def test_erosion_conserves_rock_mass(sim):
+    """Elevation × area × density + sediment in transit is conserved by erosion/deposition."""
+    from dwapar.brahmanda.world import ROCK_DENSITY_T_M3
     from dwapar.kala.calendar import Calendar
     w = sim.world
     w.f["flow_flux"][:] = 50.0
-    e0 = w.elevation.sum()
+    rho_a = w.cfg.tile_size_m ** 2 * ROCK_DENSITY_T_M3
+    w.f["uplift_rate"][:] = 0.0  # isolate surface processes
+    w.f["volcano"][:] = 0.0
+    m0 = w.elevation.sum() * rho_a + w.sediment.sum()
     elev_before = w.elevation.copy()
     sim.prakriti.step_day(w, Calendar.at(24, w.cfg), [])
-    assert w.elevation.sum() == pytest.approx(e0, rel=1e-12, abs=1e-6)
+    m1 = w.elevation.sum() * rho_a + w.sediment.sum()
+    assert m1 == pytest.approx(m0, rel=1e-12)
     assert not np.array_equal(w.elevation, elev_before)
+    assert w.sediment.sum() > 0

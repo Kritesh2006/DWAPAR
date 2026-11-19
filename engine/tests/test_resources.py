@@ -68,12 +68,18 @@ def test_invalid_extraction_rejected(world):
         resources.extract(world, "coal", 0, 0, float("nan"))
 
 
-def test_nonrenewables_never_regenerate(sim):
-    before = {m: sim.world.f[m].copy() for m in resources.NONRENEWABLE}
+def test_ores_and_coal_never_regenerate(sim):
+    before = {m: sim.world.f[m].copy() for m in resources.NEVER_INCREASING}
     sim.step(24 * 20)
-    for m in resources.NONRENEWABLE:
-        assert (sim.world.f[m] <= before[m] + 1e-9).all(), f"{m} increased"
-        assert np.array_equal(sim.world.f[m], before[m])
+    for m in resources.NEVER_INCREASING:
+        assert np.array_equal(sim.world.f[m], before[m]), f"{m} changed without extraction"
+
+
+def test_geological_deposits_change_only_through_audited_processes(sim):
+    sim.step(24 * 30)
+    err = sim.budget_errors()
+    assert err["sand_clay"] < 1e-9 and err["stone"] < 1e-9 and err["rock"] < 1e-9
+    assert sim.world.meta.get("sediment_deposited_t", 0) > 0, "deposition should be active"
 
 
 def test_wood_regrows_only_where_conditions_allow(sim):

@@ -19,8 +19,10 @@ import numpy as np
 
 from ..config import WorldConfig
 from ..grid import NEIGHBOURS, neighbour, steepest_descent
+from ..rng import generator
 from ..prakriti.solar import saturation_capacity_mm, seasonal_temperature
 from .noise import fbm, ridged
+from .tectonics import build_static, orogeny
 from .terrain import classify
 from .world import World
 
@@ -38,13 +40,20 @@ def _elevation(cfg: WorldConfig) -> np.ndarray:
     ny = (yy + 0.5) / h * 2 - 1
     edge = np.maximum(np.abs(nx), np.abs(ny)) ** 3  # squarish falloff: oceans at the rim
     radial = np.sqrt(nx**2 + ny**2) / np.sqrt(2)
-    e = 0.45 * base + 0.35 * cont + 0.30 * ridge * (cont > 0.35) - 0.55 * edge - 0.15 * radial
+    _, _, belt = orogeny(cfg)
+    # Mountain belts follow convergent plate boundaries; rifts/trenches follow divergent ones.
+    e = (0.45 * base + 0.35 * cont + 0.30 * ridge * (cont > 0.35) - 0.55 * edge - 0.15 * radial
+         + 0.16 * np.clip(belt, 0, None) * ridge ** 0.5 - 0.06 * np.clip(-belt, 0, None))
     sea = np.quantile(e, cfg.ocean_fraction)
     out = np.empty_like(e)
     land = e >= sea
     lmax, lmin = e.max(), e.min()
     out[land] = ((e[land] - sea) / (lmax - sea)) ** 2.3 * cfg.max_elevation_m
     out[~land] = -(((sea - e[~land]) / (sea - lmin)) ** 0.65) * cfg.max_depth_m
+    # Fine relief (hills, valleys, ~±45 m) so lowland slopes are never perfectly planar; without it
+    # drainage on smooth ramps forms unnaturally straight parallel channels.
+    relief = fbm(w, h, s, "elev.relief", base_cell=6 * scale, octaves=3) - 0.5
+    out[land] += relief[land] * 90.0 * np.clip(out[land] / 150.0, 0.25, 1.0)
     out[land] = np.maximum(out[land], 0.5)  # land is strictly above sea level
     out[~land] = np.minimum(out[~land], -1.0)
     return out
@@ -180,7 +189,14 @@ def generate_world(cfg: WorldConfig) -> World:
     basin = np.clip(1.0 - np.abs(elev - 350.0) / 700.0, 0, 1)
     coal = np.where(ocean, 0.0, np.clip(coal_n - 0.62, 0, None) / 0.38 * basin * 2.5e5 * tile_km2)
 
+    static = build_static(cfg, elev)
     fields = {
+        **static,
+        "groundwater": static["aquifer_capacity"] * (0.2 + 0.5 * proxy) * (~ocean),
+        "sediment": np.zeros_like(elev),
+        "sst": temp.copy(),
+        "tectonic_stress": generator(s, "tectonics.stress0").random(elev.shape) * static["stress_rate"],
+        "lava": np.zeros_like(elev),
         "elevation": elev,
         "temperature": temp,
         "surface_water": surface_water,

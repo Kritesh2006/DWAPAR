@@ -37,12 +37,18 @@ class Simulation:
         self.last_step_seconds = 0.0
         self.last_hour = {"precip": 0.0, "evap": 0.0, "burned": 0}
         self.validate_every = 24  # ticks
+        self.baseline = world.meta.get("baseline")
 
     # ----------------------------------------------------------- creation
     @classmethod
     def create(cls, cfg: WorldConfig, store: Optional["Store"] = None) -> "Simulation":
         world = generate_world(cfg)
         sim = cls(world, store)
+        if cfg.spinup_days_per_season > 0:
+            from .prakriti.spinup import spin_up
+            spin_up(world, sim.prakriti, days_per_season=cfg.spinup_days_per_season)
+        sim.baseline = sim.budgets()
+        world.meta["baseline"] = sim.baseline
         if store is not None:
             sim.world_id = store.create_world(cfg)
             sim.record_stats()
@@ -125,6 +131,13 @@ class Simulation:
             "snow_tiles": int(counts[Terrain.SNOW]),
             "precip_mean_mm_day": float(f["precip_ema"][land].mean()) if land.any() else None,
             "water_mm": self.water_budget(),
+            "sst_mean": float(f["sst"][~land].mean()) if (~land).any() else None,
+            "groundwater_mean_mm": float(f["groundwater"][land].mean()) if land.any() else None,
+            "sediment_in_transit_t": float(f["sediment"].sum()),
+            "lava_tiles": int((f["lava"] > 0.05).sum()),
+            "earthquakes_total": int(w.meta.get("earthquakes", 0)),
+            "eruptions_total": int(w.meta.get("eruptions", 0)),
+            "budgets": self.budgets(),
             "terrain": {t.name.lower(): int(counts[t]) for t in Terrain},
             "resources": res,
         }
@@ -137,13 +150,59 @@ class Simulation:
             "land_surface": float(f["surface_water"][~ocean].sum()),
             "soil": float(f["soil_water"][~ocean].sum()),
             "ocean_soil_column": float(f["soil_water"][ocean].sum()),
+            "groundwater": float(f["groundwater"].sum()),
             "atmosphere": float(f["atmo_water"].sum()),
             "snow": float(f["snow"].sum()),
         }
 
     def total_water(self) -> float:
         f = self.world.f
-        return float(f["surface_water"].sum() + f["soil_water"].sum() + f["atmo_water"].sum() + f["snow"].sum())
+        return float(f["surface_water"].sum() + f["soil_water"].sum() + f["atmo_water"].sum() + f["snow"].sum()
+                     + f["groundwater"].sum())
+
+    def budgets(self) -> dict:
+        """Conserved / audited quantities (see WORLD_LAWS.md § Conservation)."""
+        from .brahmanda.world import ROCK_DENSITY_T_M3
+        w, f, m = self.world, self.world.f, self.world.meta
+        rho_a = self.cfg.tile_size_m ** 2 * ROCK_DENSITY_T_M3
+        ocean = w.is_ocean
+        return {
+            "water_mm_total": self.total_water(),
+            "rock_t": float(f["elevation"].sum() * rho_a + f["sediment"].sum()),
+            "sand_clay_t": float(f["sand"].sum() + f["clay"].sum()),
+            "stone_t": float(f["stone"].sum()),
+            "ores_t": {k: float(f[k].sum()) for k in ("iron_ore", "copper_ore", "coal")},
+            "tectonic_rock_t": float(m.get("tectonic_rock_t", 0.0)),
+            "volcanic_rock_t": float(m.get("volcanic_rock_t", 0.0)),
+            "volcanic_stone_t": float(m.get("volcanic_stone_t", 0.0)),
+            "volcanic_clay_t": float(m.get("volcanic_clay_t", 0.0)),
+            "sediment_deposited_t": float(m.get("sediment_deposited_t", 0.0)),
+            "deposits_eroded_t": float(m.get("deposits_eroded_t", 0.0)),
+            "ocean_tiles": int(ocean.sum()),
+            "mean_ocean_depth_m": float(f["surface_water"][ocean].mean() / 1000.0) if ocean.any() else 0.0,
+            "land_mean_elevation_m": float(f["elevation"][~ocean].mean()) if (~ocean).any() else 0.0,
+        }
+
+    def budget_errors(self) -> dict:
+        """Relative closure error of each conservation law against the genesis baseline."""
+        if not self.baseline:
+            return {}
+        b0, b = self.baseline, self.budgets()
+        rock_expected = b0["rock_t"] + b["tectonic_rock_t"] + b["volcanic_rock_t"]
+        sc_expected = (b0["sand_clay_t"] + b["sediment_deposited_t"] - b["deposits_eroded_t"]
+                       + b["volcanic_clay_t"])
+        stone_expected = b0["stone_t"] + b["volcanic_stone_t"]
+
+        def rel(a, e):
+            return abs(a - e) / max(abs(e), 1e-12)
+
+        return {
+            "water": rel(b["water_mm_total"], b0["water_mm_total"]),
+            "rock": rel(b["rock_t"], rock_expected),
+            "sand_clay": rel(b["sand_clay_t"], sc_expected),
+            "stone": rel(b["stone_t"], stone_expected),
+            "ores_increase": max(b["ores_t"][k] - b0["ores_t"][k] for k in b["ores_t"]),
+        }
 
     def record_stats(self) -> None:
         if self.store is not None and self.world_id is not None:
