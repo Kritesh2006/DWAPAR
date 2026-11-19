@@ -1,5 +1,7 @@
 # DWAPAR · द्वापर
 
+[![CI](https://github.com/Kritesh2006/DWAPAR/actions/workflows/ci.yml/badge.svg)](https://github.com/Kritesh2006/DWAPAR/actions/workflows/ci.yml)
+
 **An Experiment in Digital Civilization**
 *We create the world. They create the future.*
 
@@ -8,8 +10,9 @@ artificial civilization. The world comes first.
 
 - **Phase 1** built the world: terrain, climate, water, vegetation, fire, erosion, resources and time.
 - **Phase 1.5** ("The Age Before Life", current) deepens its laws: river networks, ocean currents,
-  groundwater, sediment, tectonics and volcanoes. It also runs the world for long periods to test
-  its stability.
+  groundwater, sediment, tectonics, volcanoes, glaciers, and a dynamic sea level with moving
+  coastlines. It also runs the world for long periods to test its stability, and adds an
+  explorable 3D view. The current physics is **laws version 1.6**.
 
 There are no organisms, inhabitants, agents or animals.
 
@@ -32,8 +35,8 @@ Options can be passed on a command line, for example `start.bat --seed 7 --size 
 `start-headless.bat --days 360`, or `start-headless.bat experiment --budget-minutes 60` (advances
 the long-term experiments; see EXPERIMENTS.md).
 
-> The `.bat` scripts were written and reviewed carefully, but they have **not yet been run on a
-> real Windows machine**, because development happens on Linux. Please report any problem.
+> The `.bat` scripts are exercised on every push by CI on a real Windows runner (`setup.bat`,
+> `start-headless.bat`, `start.bat`). See the CI badge above.
 
 ## macOS / Linux quick start
 
@@ -53,7 +56,8 @@ Or run `./start.sh` from the repo root.
 | `python -m dwapar run [--days N] [--speed 0]` | Headless run; Ctrl-C/SIGTERM saves a final checkpoint |
 | `python -m dwapar experiment [--name seed42-128] [--budget-minutes 30]` | Advance the resumable long-term experiments |
 | `python -m dwapar bench [--size 128] [--days 10]` | Measure engine performance |
-| `pytest` | Run the test suite |
+| `pytest` | Run the engine test suite |
+| `cd ../dashboard && npm run test:unit && npm run test:e2e` | Dashboard unit tests and Playwright end-to-end tests (start a real engine) |
 
 `--speed` is in **simulated hours per real second**; `0` means as fast as possible. The world
 database is `data/dwapar.sqlite`. Every launch **resumes the most recent checkpoint**; delete that
@@ -75,11 +79,28 @@ file to start a fresh world.
 - **Disasters.** Eruptions, earthquakes, wildfires, floods and droughts, all detected from state.
 - **Resources.** Ten resources at physical locations (freshwater, saltwater, wood, stone, sand,
   clay, iron ore, copper ore, coal, organic matter), with audited budgets.
-- **Conservation.** Water, rock mass and mineral budgets are audited and close to ~10⁻¹⁶.
+- **Ice and sea.** Glaciers (compaction, Glen-law flow, melt, sublimation, calving) and a sea
+  level solved daily from ocean volume, so coastlines move.
+- **Conservation.** Water, rock mass and mineral budgets are audited every day.
 - **Time.** Deterministic and reproducible, identical at any speed or frame rate. Checkpoints are
   SHA-256 verified, and the world recovers after a crash or power loss.
 
 ## The observatory (Drishti)
+
+Switch between **2D map** and **3D world** in the top bar.
+
+**3D world.** Fly over the planet built from the engine's own data:
+- **Terrain:** real elevation, adjustable relief, with snow and glaciers from the engine's stores.
+- **Water:** the ocean at the dynamic sea level (depth-tinted from the actual sea floor, with
+  waves, glints and surf), plus lakes and flowing rivers.
+- **Vegetation:** forests whose density and type come from the biomass field and temperature
+  (vegetation is a continuous field, not organisms).
+- **Sky:** a physical sky with the sun placed by the world's date, hour and latitude, plus cloud
+  decks from the humidity field, and fire and lava glow.
+- **Controls:** drag to orbit, right-drag to pan, wheel to zoom, WASD to fly, Q/E to turn, click
+  to inspect.
+
+**2D map** and the panels around both views:
 
 - **Living-planet view.** A full-screen map with animated river flow, clouds drifting on engine
   winds, rain, wildfire and lava glow, and day/night, all driven by engine data.
@@ -112,5 +133,6 @@ experiments/        committed experiment results (JSONL) and status
 setup.bat start.bat start-headless.bat   Windows launchers
 ```
 
-See EXPERIMENTS.md (long-term results), WORLD_LAWS.md (the physics and its simplifications),
+Laws versions and what changed in each: `engine/dwapar/laws.py`. Experiments are stored per laws
+version in `experiments/laws-<version>/`. See EXPERIMENTS.md (long-term results), WORLD_LAWS.md (the physics and its simplifications),
 ARCHITECTURE.md, CONSTITUTION.md, TASKS.md, JOURNAL.md, DECISIONS.md and ROADMAP.md.

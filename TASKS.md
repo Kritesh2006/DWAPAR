@@ -25,21 +25,34 @@ Status legend: ✅ done and tested · 🟡 partial · ⬜ not started
 | Dashboard | Heatmaps, resource maps, disaster tracker, timeline, export, speeds, archive | ✅ | API tests `test_frame_*`, `test_load_world_by_id` |
 | Windows | setup.bat, start.bat, start-headless.bat | 🟡 | written and reviewed; **not executed on Windows** (no Windows machine available) |
 
-## Last verified (session 3)
-`cd engine && pytest`: **87 passed in 126 s**; `cd dashboard && npm run build`: strict TypeScript build clean.
-Dashboard checked in headless Chrome: no console or page errors.
+## Session 4 — laws 1.6 / engine 0.3
+
+| Area | Item | Status | Evidence |
+|---|---|---|---|
+| Laws | Glacier dynamics: compaction, Glen-law flow, melt, sublimation, calving | ✅ | `tests/test_cryosphere_sea.py` (9 tests); experiments (EXPERIMENTS.md) |
+| Laws | Dynamic sea level and moving coastlines | ✅ | `test_sea_falls_*`, `test_sea_rises_*`, `test_level_solver_is_accurate` |
+| Engine | Optimisation without changing results | ✅ | `tests/test_performance.py`, golden fingerprints, A/B −21 % |
+| Integrity | Laws versioning; old checkpoints preserved; versions separated | ✅ | `test_laws_history_records_continuation`; `experiments/laws-1.5` unchanged |
+| 3D | Three.js world explorer from engine data | ✅ | Playwright `3D world renders the engine terrain with WebGL` |
+| 3D | Terrain textures, vegetation, water shaders, atmosphere, camera controls | ✅ | visual review (screenshots in JOURNAL) |
+| CI | GitHub Actions: Linux, Windows (incl. .bat scripts), dashboard | ✅ | see JOURNAL for the run ID and result |
+| Tests | Automated dashboard tests (Vitest 9, Playwright 6) | ✅ | `npm run test:unit`, `npm run test:e2e` |
+| Experiment | Laws-1.6 runs: genesis seed2026-64 and continuation from laws-1.5 year 100 | 🟡 | EXPERIMENTS.md |
+
+## Last verified (session 4)
+- Engine: `pytest` **99 passed** (189 s, local); CI Linux and Windows jobs green.
+- Dashboard: strict type-check and build clean; Vitest 9 passed; Playwright 6 passed (local);
+  CI dashboard job result recorded in JOURNAL.md.
 
 ## Known issues / open items
-- 🟡 **Snow accumulates without limit** on perennially cold tiles (no glacier flow, sublimation or
-  calving), slowly moving water from ocean to land. Needed before millennial runs are meaningful
-  for sea level.
-- 🟡 **Sea level is fixed in elevation** (ocean = elevation < 0). Ocean water volume changes are
-  measured but do not move coastlines.
-- 🟡 **Spin-up samples only 6 days per season**: worlds dry for 1–4 years before stabilising.
-- 🟡 **Rivers are wide.** With the 0.6 mm/h threshold, river tiles reach ~10 % of land in wet years
-  on seed 42. That is plausible for 2 km tiles but should be reviewed visually.
+- 🟡 **Laws-1.5 sea surface was not level** (−10 … +113 m). Fixed in 1.6; laws-1.5 lake and
+  coastal results carry this caveat (EXPERIMENTS.md).
+- 🟡 Laws 1.6 water closure is ~10⁻¹⁴ per simulated year, from rounding in the daily sea-level
+  redistribution (1.5: ~10⁻¹⁷/yr). It is negligible but grows linearly; watch it in millennial runs.
+- 🟡 Inland basins below sea level are treated as ocean (no connectivity test).
+- 🟡 Spin-up samples only 6 days per season, so worlds dry for 1–4 years before stabilising.
+- 🟡 The 3D view uses one vertex per tile, so relief is smooth but coarse at close range. Forests
+  and moonlight are representational.
 - 🟡 Atmosphere wraps periodically at map edges while land and water do not.
-- 🟡 Heat advection in the ocean is advective-form (not exactly conservative); documented in D-016.
 - ⬜ `resources.extract("stone")` does not lower elevation yet.
-- ⬜ CI (GitHub Actions) and dashboard UI tests.
-- ⬜ Performance: 128² costs ~8 ms/tick (≈ 1.9 h per 100 simulated years on one core).
+- ⬜ 1,000- and 10,000-year milestones.

@@ -132,3 +132,47 @@ fire flickers. Nothing rendered feeds back into the engine.
 **API additions:** `/api/frame?layers=…`, `/api/dynamics` (winds, currents), `/api/budgets`,
 `/api/load_world`, resource layers `res_<name>`, visual layers (`clouds`, `rain`, `insolation`,
 `flow_dir`, `lava`, `sst`, `groundwater`, `sediment`, `uplift`, `plates`, `volcanoes`, `stress`).
+
+## Session 4 additions (engine 0.3, laws 1.6)
+
+**Laws versioning** (`engine/dwapar/laws.py`). `LAWS_VERSION` changes whenever physics changes
+outcomes. Worlds store `meta.laws_version` and `meta.laws_history` (`[{from_tick, laws}]`).
+`Simulation.from_checkpoint()` calls `adopt_current_laws()`, which appends the switch and logs a
+`laws_change` event. Checkpoints from older engines load: missing fields are filled by
+`_upgrade_fields`, with `ice` starting at zero and `sea_level` at 0.
+
+**Cryosphere and sea level** run daily, after volcanism: `_cryosphere` (compaction, sublimation,
+melt, Glen-law flow via `mfd_flow`, calving), then `_sea_level`. `World.is_ocean` is
+`elevation < meta.sea_level` everywhere. The API exposes `sea_level` in `/api/frame` and
+`/api/status`, plus the `ice` layer.
+
+**Experiments by laws version.** Each version has its own directory:
+`experiments/laws-<v>/{results,checkpoints,status.json}` plus `data/experiments/laws-<v>/`. A
+`start_from` spec continues an older world under new laws. Records carry `laws_version` and
+`laws_history`, and milestones count only the years simulated under the current laws.
+
+**Performance (bit-identical).** `mfd_flow` reads padded views and accumulates in place; solar
+geometry is evaluated per latitude row; fire spread is skipped when nothing burns.
+`tests/test_performance.py` compares against verbatim copies of the 0.2 code, and three golden
+fingerprints were unchanged. A/B best-of-6 at 128²: 6.93 → 5.45 ms/tick (−21 %). The new laws-1.6
+processes then add about 0.3 ms/tick.
+
+**3D explorer** (`dashboard/src/render3d/World3D.ts`, lazily loaded). A Three.js r170 scene built
+only from engine frames:
+- terrain mesh (one vertex per tile, adjustable relief exaggeration);
+- `MeshStandardMaterial` patched with procedural detail, slope rock, beach and snow/ice;
+- ocean `ShaderMaterial` at the engine sea level, with a depth texture from the real sea floor;
+- lake surface mesh, instanced forests, river-flow particles, fire/lava sprites;
+- Preetham `Sky`, with the sun from the engine date, hour and latitude (same formulas as
+  `solar.py`, unit-tested);
+- cloud decks from the humidity field;
+- OrbitControls plus keyboard flight and raycast picking.
+
+The renderer has its own animation loop and never writes to the engine.
+
+**CI** (`.github/workflows/ci.yml`):
+- Linux pytest.
+- A Windows job that runs `setup.bat`, the engine tests, `start-headless.bat` and `start.bat` on a
+  real Windows runner.
+- A dashboard job: type-check, build, Vitest unit tests, and Playwright end-to-end tests that
+  start a real engine and drive both the 2D map and the WebGL 3D world.

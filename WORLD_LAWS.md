@@ -1,11 +1,13 @@
 # World Laws
 
-These are the physical rules of DWAPAR (engine 0.2, Phase 1.5) and every simplification behind them.
+These are the physical rules of DWAPAR — **laws version 1.6** (engine 0.3) — and every simplification
+behind them. Laws versions are listed in `engine/dwapar/laws.py`. Each world records which laws
+governed which part of its history, and experiments are stored per laws version.
 **This is a simplified model, not a reproduction of real-world physics.** Constants live at the
 top of `engine/dwapar/prakriti/processes.py`, `brahmanda/terrain.py` and `brahmanda/tectonics.py`.
 
 ## Geometry and time
-- Square tiles, default 2 km edge (128 tiles ≈ 256 km). Sea level is 0 m. Map edges are closed to
+- Square tiles, default 2 km edge (128 tiles ≈ 256 km). Sea level is dynamic (starts at 0 m). Map edges are closed to
   water, sediment and groundwater. The atmosphere is periodic, so air leaving one edge re-enters
   the opposite one.
 - One tick = 1 simulated hour. There are 24 h/day, 4 seasons of 90 days, and 360 days/year. Day 0
@@ -54,8 +56,8 @@ error is ≤ 3.2×10⁻¹⁵ relative after 100 simulated years (experiment seed
   capacity is 24 mm at 15 °C, +6.5 %/°C.
 - **Precipitation.** Half of the excess over capacity falls each hour. Capacity is modulated
   0.78–1.20× by a seed-derived daily weather field. Snow falls below 0.5 °C on land. Melt is
-  0.2 mm per °C·h. **Known limitation:** no glacier flow, sublimation or calving, so perennial snow
-  accumulates without bound (measured ≈ 2×10⁴ mm·tiles/yr on seed2026-64; see EXPERIMENTS.md).
+  0.2 mm per °C·h. (Laws 1.5 had no other snow sink, so perennial snow grew without bound;
+  laws 1.6 adds the cryosphere below.)
 - **Soil.** Infiltration up to 8 mm/h. Soil above 95 % of capacity spills to the surface.
 - **Groundwater.** Aquifer capacity is 400–3000 mm (porous lowlands store more, mountains less).
   - Percolation: 1 %/h of soil water above 35 % of capacity.
@@ -72,6 +74,41 @@ error is ≤ 3.2×10⁻¹⁵ relative after 100 simulated years (experiment seed
 - **Rivers, lakes and wetlands are not drawn.** They are tiles whose sustained discharge, depth
   or saturation crosses a threshold. A river is a tile with outflow ≥ 0.6 mm/h, about the top
   2 % of land, draining ~25× its own rainfall.
+
+## Cryosphere (laws 1.6)
+Glacier ice is a fifth water store (`ice`, mm water equivalent; thickness = w.e. / 0.917). Daily:
+1. **Compaction.** Snowpack beyond 500 mm w.e. turns into ice at 0.2 %/day of the excess.
+2. **Sublimation.** Up to 0.4 mm/day goes from snow, then ice, into the atmosphere. It scales
+   with (1 − RH) and daily insolation, and occurs only below 2 °C.
+3. **Melt.** Exposed ice (snow < 50 mm) melts at 7 mm w.e. per positive degree-day into surface
+   water.
+4. **Flow.** Shallow-ice approximation with Glen's law (n = 3): speed
+   `u = 30 m/yr · (H/100 m)⁴ · (slope/0.1)³` on the ice-surface gradient. The mobile fraction
+   is u / tile size, capped at 5 %/day, and routed by the same stable MFD scheme as water.
+5. **Calving.** Ice on ocean tiles breaks off and melts into the ocean. Ice on coastal land tiles
+   sheds 2 %/day.
+
+Glaciers are buried ice: vegetation cannot grow under more than 500 mm w.e., and ice lowers air
+temperature by 3 °C (albedo). New terrain class: **glacier** (≥ 1000 mm w.e.).
+
+**Simplifications:** no ice shelves, no basal sliding, no isostatic depression, no temperature
+inside the ice, and icebergs melt instantly.
+
+## Dynamic sea level and coastlines (laws 1.6)
+- Every day the ocean's total water volume is spread over the sea-floor hypsometry. The new
+  level S solves `Σ max(S − elevation, 0) × 1000 = ocean volume` (bisection, 64 iterations).
+- Tiles whose floor lies below S are ocean. Newly flooded tiles add their own water to the sea.
+  Tiles left above S become land and keep their standing water, which drains back as rivers.
+- Ocean depths are set to S − floor, scaled so the total is exactly unchanged. The sea surface is
+  therefore level each day.
+- Erosion, landslides and coastal limits grade to S.
+- **Why it matters:** laws 1.5 had no levelling. Ocean water equalised only through 5 %/h flow
+  between neighbouring tiles, which behaves like diffusion with a ~37-year timescale at 128². The
+  laws-1.5 sea surface was therefore *not level*. In the year-34 seed-42 world it ranged from
+  −4.6 m (median) to +15 m near river mouths. In the year-100 seed-2026 world: median −9.5 m,
+  maximum +113 m. See EXPERIMENTS.md.
+- **Simplifications:** inland basins below sea level count as ocean (threshold rule, no
+  connectivity test); no tides; no thermal expansion; no isostasy.
 
 ## Soil and vegetation
 - Fertility is derived: `0.55·(1−e^{−OM/8}) + 0.2·clay + 0.25·moisture`. Volcanic ash adds clay,
@@ -134,7 +171,7 @@ error is ≤ 3.2×10⁻¹⁵ relative after 100 simulated years (experiment seed
 ## Conservation laws (audited every day, shown in the dashboard)
 | Law | Closure (measured) |
 |---|---|
-| Total water (all five stores) | ≤ 3.2×10⁻¹⁵ over 100 years (seed2026-64) |
+| Total water (six stores incl. ice) | laws 1.5: ≤ 3.2×10⁻¹⁵ over 100 years; laws 1.6: ~10⁻¹⁴ per year (rounding in the daily sea-level redistribution), see EXPERIMENTS.md |
 | Rock mass = Σ elevation × area × ρ + sediment in transit, changed only by tectonic and volcanic counters | ≤ 2.4×10⁻¹³ over 100 years (float accumulation) |
 | Sand + clay, changed only by deposition, erosion and ash counters | ~10⁻¹⁶ |
 | Stone, changed only by lava counter | exact |
@@ -143,7 +180,7 @@ error is ≤ 3.2×10⁻¹⁵ relative after 100 simulated years (experiment seed
 ## Resources
 | Resource | Source of truth | Renewal |
 |---|---|---|
-| Freshwater (m³) | land surface + soil + snow + groundwater | water cycle only |
+| Freshwater (m³) | land surface + soil + snow + groundwater + glacier ice | water cycle only |
 | Saltwater (m³) | ocean-tile water | reservoir |
 | Wood (t) | 50 % of living biomass | vegetation growth only |
 | Organic matter (t) | soil organic matter | litter and char inputs, decomposition losses |

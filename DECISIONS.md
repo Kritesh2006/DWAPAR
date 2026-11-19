@@ -122,3 +122,40 @@ new frame, so visuals can never drift from the simulation for more than one fram
 Plain `.bat` files need no extra tooling. `setup.bat` creates `.venv` and builds the dashboard;
 `start.bat` waits for the API before opening the browser. Line endings are pinned to CRLF in
 `.gitattributes`. They have not yet been executed on Windows.
+
+## Session 4 (laws 1.6, engine 0.3)
+
+### D-025 Optimise only where results stay bit-identical
+Profiling showed the time was in allocation and redundant trigonometry, not in the physics. Every
+optimisation kept the same floating-point operations in the same order. This was verified against
+golden fingerprints and oracle tests. Numba or compiled kernels would be faster, but they add a
+dependency and make cross-machine bit-reproducibility harder to guarantee, so they are deferred.
+Measured gain: 21 %.
+
+### D-026 Laws versions instead of silently changing the physics under running experiments
+Physics changes alter outcomes. Results from different laws must never be pooled, and a world's
+history must say which laws produced it. Hence `LAWS_VERSION`, per-world `laws_history`, and
+per-version experiment directories. The laws-1.5 results and checkpoints are preserved verbatim.
+
+### D-027 Glacier ice as a separate store with Glen-law flow
+Perennial snow needed sinks that act where the snow is: compaction into ice, flow down to warmer
+ground, melt, sublimation and calving. Speed ∝ H⁴·slope³ is the standard shallow-ice scaling. The
+first attempt used ∝ H², which left thin glaciers immobile so ice accumulated (+1.7×10⁴ mm·tiles/yr).
+It was replaced before any experiment ran.
+
+### D-028 Daily sea-level solve over the sea-floor hypsometry
+Making the ocean level each day is physically right: gravity waves equalise the sea surface in
+hours, not decades. It also turns ocean volume changes, such as ice ages, into moving coastlines.
+It exposed a laws-1.5 artefact: sea-surface heights of −10 to +113 m. *Simplification:* the
+threshold rule treats inland basins below sea level as ocean.
+
+### D-029 3D explorer with Three.js, lazily loaded, data-only
+Three.js r170 is MIT-licensed, local and has no build plugins. It is loaded only when the 3D view
+is opened, keeping the main bundle at about 190 kB. Forest instances are deliberately
+representational (groves sized for visibility). Moonlight at night is representational. Both are
+labelled as such in the code.
+
+### D-030 CI runs the Windows scripts on a real Windows runner
+The `.bat` files could not be tested in the Linux development environment. CI now executes
+`setup.bat`, `start-headless.bat` and `start.bat` on `windows-latest`. `DWAPAR_NO_PAUSE` and
+`DWAPAR_NO_BROWSER` exist only to make unattended runs possible.

@@ -35,6 +35,20 @@ export default function App() {
   const [err, setErr] = useState<string | null>(null);
   const [fps, setFps] = useState(0);
   const map = useRef<MapHandle>(null);
+  const bar = useRef<HTMLElement>(null);
+  const [barBottom, setBarBottom] = useState(78);
+  // Panels sit below the *measured* top bar: fonts differ between machines and the bar may wrap.
+  useEffect(() => {
+    const el = bar.current;
+    if (!el) return;
+    const ro = new ResizeObserver(() => {
+      const b = Math.ceil(el.getBoundingClientRect().bottom) + 8;
+      setBarBottom(b);
+      document.documentElement.style.setProperty("--bar-bottom", `${b}px`);
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
   const view3d = useRef<View3DHandle>(null);
   const [dim, setDim] = useState<"2d" | "3d">(() => (localStorage.getItem("drishti.view") === "3d" ? "3d" : "2d"));
   useEffect(() => { try { localStorage.setItem("drishti.view", dim); } catch { /* storage unavailable */ } }, [dim]);
@@ -139,7 +153,7 @@ export default function App() {
       {dim === "2d" ? (
         <MapStage ref={map} frame={frame} mode={mode} overlays={overlays} windRows={windRows} simHoursPerSecond={simHps}
           selected={selected} markers={markers}
-          insets={{ left: 206, right: 352, top: 78, bottom: drawer ? 236 : 54 }} onSelect={(x, y) => { setSelected({ x, y }); setTab("inspect"); }} />
+          insets={{ left: 206, right: 352, top: barBottom, bottom: drawer ? 236 : 54 }} onSelect={(x, y) => { setSelected({ x, y }); setTab("inspect"); }} />
       ) : (
         <Suspense fallback={<div className="stage-empty">Loading the 3D world…</div>}>
           <WorldView3D ref={view3d} frame={frame} mode={mode} simHoursPerSecond={simHps}
@@ -148,7 +162,7 @@ export default function App() {
         </Suspense>
       )}
 
-      <header className="bar glass">
+      <header className="bar glass" ref={bar}>
         <div className="brand">
           <div className="wordmark"><span className="en">DWAPAR</span><span className="hi">द्वापर</span></div>
           <div className="tag-lines"><span>An Experiment in Digital Civilization</span><em>We create the world. They create the future.</em></div>

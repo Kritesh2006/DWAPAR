@@ -67,6 +67,19 @@ test("heatmaps, resource maps, inspector and disasters", async ({ page }) => {
   expect(errors).toEqual([]);
 });
 
+test("panels are never covered by the top bar, at any width", async ({ page }) => {
+  for (const width of [1280, 1440, 1920]) {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto("/");
+    const barBox = await page.locator("header.bar").boundingBox();
+    for (const sel of [".dock.left", ".dock.right"]) {
+      const box = await page.locator(sel).boundingBox();
+      expect(box!.y, `${sel} at ${width}px`).toBeGreaterThanOrEqual(barBox!.y + barBox!.height);
+    }
+    await page.getByRole("button", { name: "Disasters", exact: true }).click({ timeout: 5_000 });
+  }
+});
+
 test("archive lists worlds and checkpoints", async ({ page }) => {
   await page.goto("/");
   await page.getByRole("button", { name: "Archive" }).click();

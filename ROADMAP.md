@@ -17,19 +17,27 @@ Done in session 3:
 - Resumable long-term experiment harness
 - Black-and-gold observatory; Windows launchers
 
+Done in session 4:
+- Glacier dynamics (compaction, Glen-law flow, melt, sublimation, calving)
+- Dynamic sea level with moving coastlines (laws 1.6)
+- Laws versioning; per-version experiments; continuation runs
+- Engine optimisation (−21 %, proven bit-identical)
+- Three.js 3D world explorer
+- CI on Linux and Windows; Vitest and Playwright dashboard tests
+
 Remaining:
-- **Long-term experiments.** Advance the suite to 100 → 1,000 → 10,000 simulated years, analyse
-  results in EXPERIMENTS.md, and fix only genuine programming errors. See EXPERIMENTS.md for the
-  wall-time estimates; 10,000 years at 128² needs ~230 CPU-hours at current speed.
-- **Performance for long runs.** Numba or vectorised C for routing; optional coarser-tick "geologic
-  mode" with validated equivalence; multi-process experiment workers.
+- **Long-term experiments under laws 1.6** toward 1,000 → 10,000 years (EXPERIMENTS.md has
+  progress and cost estimates). The 64² world needs ~6 h of CPU per 1,000 years.
+- **Faster engine for millennial runs.** Compiled routing (Numba/C) with a documented laws or
+  version change; a validated coarser "geologic tick"; parallel experiment workers.
 - **Physics refinements.**
-  - Sea-level response: oceans are defined by elevation < 0, so sea level is fixed in elevation;
-    track a global sea-surface height so the water budget and the coastline interact.
+  - Connectivity-aware ocean (inland basins below sea level should be lakes, not ocean).
+  - Thermal expansion, isostasy, ice shelves.
   - Sea ice; cloud radiative effects; slow plate motion over >10⁶ years.
-  - Lowering elevation when stone is extracted (needed before Phase 2).
-- **Verification.** Run the Windows `.bat` scripts on real Windows; add CI (GitHub Actions) and
-  dashboard UI tests.
+  - Spin-up long enough to remove the 1–4-year drying adjustment.
+  - Lower elevation when stone is extracted (needed before Phase 2).
+- **3D explorer refinements.** Higher-resolution terrain via interpolated sub-tile vertices; true
+  river ribbons; volumetric clouds; LOD for 512² worlds.
 
 ## Phase 2 — Prana (life) — requires authorisation
 Organisms with metabolism drawing on the world's real energy and resources; reproduction with

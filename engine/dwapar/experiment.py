@@ -118,6 +118,7 @@ class YearAccumulator:
             "water_mm": sim.water_budget(),
             "ocean_tiles": int(w.is_ocean.sum()),
             "mean_ocean_depth_m": b["mean_ocean_depth_m"],
+            "sea_level_m": b.get("sea_level_m", 0.0),
             "land_mean_elevation_m": b["land_mean_elevation_m"],
             "max_elevation_m": float(f["elevation"].max()),
             "sediment_in_transit_t": float(f["sediment"].sum()),
