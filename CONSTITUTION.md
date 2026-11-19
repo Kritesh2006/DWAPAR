@@ -4,11 +4,15 @@ These rules bind every contributor, human or AI. Changing one requires an entry 
 DECISIONS.md and explicit approval from the project owner.
 
 ## Article I — Scope of the current phase
-1. Phase 1 builds the world only. **No characters, intelligent agents, civilizations,
-   animals or human inhabitants** may be introduced.
-2. `prana` (life) and `buddhi` (intelligence) are reserved and must stay empty until
-   the project owner explicitly authorises Phase 2. A test enforces this.
-3. The dashboard must never show inhabitants or invented population statistics.
+1. **Phase 1.5 — The Age Before Life** is authorised by the project owner (2026-11-19). It covers
+   world stabilisation, better environmental laws, long-term experiments and visualisation.
+2. **No organisms, characters, intelligent agents, animals, civilizations or human inhabitants**
+   may be introduced. Vegetation stays a continuous biomass field, not organisms.
+3. `prana` (life) and `buddhi` (intelligence) stay empty until the owner explicitly authorises
+   Phase 2. A test enforces this.
+4. The dashboard must never show inhabitants or invented population statistics.
+5. Natural collapse (vegetation die-off, drying, flooding, erosion) must not be artificially
+   prevented. Only programming errors are fixed, and each fix must say which it was.
 
 ## Article II — Scientific integrity
 1. Never fabricate scientific or experimental results.
@@ -26,8 +30,9 @@ DECISIONS.md and explicit approval from the project owner.
 2. Identical seed and configuration must produce identical worlds. Identical starting
    state and tick count must produce identical futures, whatever the speed, frame rate,
    step granularity or restarts.
-3. Water moves only between explicit stores. Erosion moves rock and never creates it.
-   Nonrenewable deposits only decrease, and only through `resources.extract`.
+3. Water moves only between explicit stores. Rock mass changes only through counted tectonic and
+   volcanic sources. Metal ores and coal only decrease, and only through `resources.extract`.
+   Stone, sand and clay change only through counted geological processes.
 4. The engine refuses to advance from an invalid state (NaN, negative mass,
    out-of-range values).
 

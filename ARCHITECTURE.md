@@ -95,3 +95,40 @@ The hot path is about 8 neighbour shifts per routing call, done twice per tick
 23.5 ms at 256² and 125 ms at 512² (see TASKS.md). Generation uses one Python-loop
 pass (priority-flood plus flow accumulation), which dominates at 512² (≈2 s). Options
 for larger worlds are listed in ROADMAP.md.
+
+## Phase 1.5 additions (engine 0.2)
+
+**New state fields.** Dynamic: `groundwater`, `sediment`, `sst`, `tectonic_stress`, `lava`.
+Static (pure functions of the config, recomputable): `plate_id`, `uplift_rate`, `stress_rate`,
+`volcano`, `aquifer_capacity`, `current_u`, `current_v`. Checkpoints from engine 0.1 are upgraded on
+load (`smriti/store.py::_upgrade_fields`): static fields are recomputed exactly and new stores start
+empty.
+
+**Process order per tick:** radiation → ocean mixed layer (relax, exchange, currents) → wind heat
+transport → air relaxation → evaporation → moisture transport → precipitation → melt → soil →
+groundwater (percolation, capillary rise, springs) → MFD runoff → fire.
+**Per day:** drought counters → vegetation → lateral groundwater → erosion/sediment/deposition →
+tectonics and earthquakes → volcanism → lava cooling → reclassification → disaster detection →
+calendar events.
+
+**Budgets.** `Simulation.budgets()` and `budget_errors()` audit water, rock mass, sand+clay, stone
+and ores against the genesis baseline stored in `world.meta["baseline"]`. The API exposes them at
+`/api/budgets`.
+
+**Experiments** (`engine/dwapar/experiment.py`). Each experiment has a local working SQLite store
+(`data/experiments/`, not committed). After every recorded year it also writes a *portable* latest
+checkpoint (`experiments/checkpoints/<name>.npz`, committed), so a fresh clone or a new cloud session
+resumes instead of restarting. Results go to `experiments/results/<name>.jsonl`: one record per
+recorded year, tagged with the engine git commit. Progress is in `experiments/status.json`.
+SIGTERM/SIGINT stop cleanly.
+
+**Observatory rendering** (`dashboard/src/render/Renderer.ts`). Two clocks are kept apart. The
+*data clock* is ~1 Hz `/api/frame` pulls (13 layers captured under one engine lock, so they
+describe the same instant); it rebuilds the base bitmap. The *paint clock* (requestAnimationFrame)
+only extrapolates cosmetic motion from engine data: particles follow `flow_dir`, clouds drift by
+engine wind × elapsed simulated time, rain is drawn where the last hour's precipitation fell, and
+fire flickers. Nothing rendered feeds back into the engine.
+
+**API additions:** `/api/frame?layers=…`, `/api/dynamics` (winds, currents), `/api/budgets`,
+`/api/load_world`, resource layers `res_<name>`, visual layers (`clouds`, `rain`, `insolation`,
+`flow_dir`, `lava`, `sst`, `groundwater`, `sediment`, `uplift`, `plates`, `volcanoes`, `stress`).
