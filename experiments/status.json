@@ -1,0 +1,36 @@
+{
+  "seed2026-64": {
+    "engine_versions": [
+      "9acf670"
+    ],
+    "last_record": 100,
+    "ms_per_tick": 2.875,
+    "notes": [],
+    "spec": {
+      "name": "seed2026-64",
+      "seed": 2026,
+      "size": 64,
+      "target_years": 10000
+    },
+    "state": "paused (stopped by signal; resumes from last checkpoint)",
+    "wall_s_total": 2518.185695078,
+    "years_done": 100
+  },
+  "seed42-128": {
+    "engine_versions": [
+      "9acf670"
+    ],
+    "last_record": 34,
+    "ms_per_tick": 8.404,
+    "notes": [],
+    "spec": {
+      "name": "seed42-128",
+      "seed": 42,
+      "size": 128,
+      "target_years": 10000
+    },
+    "state": "paused (stopped by signal; resumes from last checkpoint)",
+    "wall_s_total": 2516.078188616,
+    "years_done": 34
+  }
+}
