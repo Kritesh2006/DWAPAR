@@ -10,3 +10,4 @@ dashboard/node_modules/
 dashboard/dist/
 .venv/
 .DS_Store
+*.tsbuildinfo
