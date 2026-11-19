@@ -1,2 +1,3 @@
-*.bat text eol=crlf
+# Windows batch files are stored byte-for-byte with CRLF (also correct in GitHub ZIP downloads)
+*.bat -text
 *.sh text eol=lf
