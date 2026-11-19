@@ -135,6 +135,37 @@ def _save_status(status: dict) -> None:
     STATUS.write_text(json.dumps(status, indent=2, sort_keys=True) + "\n")
 
 
+def _code_version() -> str:
+    """Git commit of the engine that produced a record (+ '-dirty' if uncommitted changes exist)."""
+    import subprocess
+    try:
+        sha = subprocess.run(["git", "-C", str(ROOT), "rev-parse", "--short", "HEAD"], capture_output=True,
+                             text=True, timeout=5).stdout.strip()
+        dirty = subprocess.run(["git", "-C", str(ROOT), "status", "--porcelain", "--", "engine/dwapar"],
+                               capture_output=True, text=True, timeout=5).stdout.strip()
+        return (sha or "unknown") + ("-dirty" if dirty else "")
+    except Exception:
+        return "unknown"
+
+
+class _Stop(Exception):
+    pass
+
+
+def _install_signal_handlers() -> None:
+    """Turn SIGTERM/SIGINT into a clean stop so status and checkpoints are always written."""
+    import signal
+
+    def handler(signum, frame):
+        raise _Stop()
+
+    for sig in (signal.SIGTERM, signal.SIGINT):
+        try:
+            signal.signal(sig, handler)
+        except ValueError:  # not in main thread (e.g. tests)
+            pass
+
+
 def run_experiment(spec: ExperimentSpec, budget_minutes: float, log=print) -> dict:
     RESULTS.mkdir(parents=True, exist_ok=True)
     CKPT_DIR.mkdir(parents=True, exist_ok=True)
@@ -162,6 +193,10 @@ def run_experiment(spec: ExperimentSpec, budget_minutes: float, log=print) -> di
     status = _load_status()
     entry = status.get(spec.name, {"spec": asdict(spec), "wall_s_total": 0.0, "notes": []})
     entry["spec"] = asdict(spec)
+    version = _code_version()
+    entry.setdefault("engine_versions", [])
+    if version not in entry["engine_versions"]:
+        entry["engine_versions"].append(version)
     log(f"[{spec.name}] {'resumed at' if resumed else 'created; starting at'} year {year} "
         f"(target {spec.target_years}, budget {budget_minutes} min)")
 
@@ -189,6 +224,7 @@ def run_experiment(spec: ExperimentSpec, budget_minutes: float, log=print) -> di
             year += interval
             el = time.monotonic() - block_start
             rec = acc.record(year, entry["wall_s_total"] + (time.monotonic() - t_session), el / ticks * 1000)
+            rec["engine"] = version
             sim.world.validate()
             with results_path.open("a") as fh:
                 fh.write(json.dumps(rec) + "\n")
@@ -206,6 +242,9 @@ def run_experiment(spec: ExperimentSpec, budget_minutes: float, log=print) -> di
                 break
         else:
             entry["state"] = "complete"
+    except _Stop:
+        entry["state"] = "paused (stopped by signal; resumes from last checkpoint)"
+        log(f"[{spec.name}] stopped by signal at year {year}")
     except (InvalidStateError, FloatingPointError) as exc:
         entry["state"] = f"halted: {type(exc).__name__}: {exc}"
         entry["notes"].append(f"halted near tick {sim.world.tick}: {exc}")
@@ -228,6 +267,7 @@ DEFAULT_SUITE = [
 
 
 def run_suite(names: Optional[list[str]], budget_minutes: float, log=print) -> None:
+    _install_signal_handlers()
     specs = [s for s in DEFAULT_SUITE if not names or s.name in names]
     if not specs:
         raise SystemExit(f"unknown experiment; choose from {[s.name for s in DEFAULT_SUITE]}")
@@ -236,4 +276,6 @@ def run_suite(names: Optional[list[str]], budget_minutes: float, log=print) -> N
         remaining = (deadline - time.monotonic()) / 60
         if remaining <= 0.1:
             break
-        run_experiment(spec, remaining, log)
+        entry = run_experiment(spec, remaining, log)
+        if entry.get("state", "").startswith("paused (stopped"):
+            break

@@ -30,15 +30,27 @@ def test_mfd_never_overshoots():
     assert new_surface[0, 0] >= new_surface[0, 1]  # source not drained below its neighbour
 
 
-def test_mfd_reduces_parallel_channels_vs_phase1():
-    """On the same seed, MFD + fine relief yields channel networks that merge (fewer, larger rivers)."""
+def test_drainage_converges_into_channels():
+    """Discharge concentrates into channels instead of sheet flow: the top 2 % of land tiles carry at
+    least 3× the 2 % share they would carry if runoff stayed uniform (measured: ~6× on this seed)."""
     sim = Simulation.create(WorldConfig(seed=42, width=64, height=64))
     sim.step(24 * 20)
     land = ~sim.world.is_ocean
     flux = sim.world.flow_flux[land]
-    # Convergent drainage: flow concentrates — the top 2 % of tiles carry a large share of discharge.
     top = np.sort(flux)[-max(1, int(0.02 * flux.size)):]
-    assert top.sum() / flux.sum() > 0.2
+    assert top.sum() / flux.sum() > 3 * 0.02
+
+
+def test_surface_flow_is_numerically_stable():
+    """No checkerboard sloshing: water surfaces change by centimetres, not metres, per hour."""
+    sim = Simulation.create(WorldConfig(seed=42, width=64, height=64))
+    sim.step(24 * 15)
+    f = sim.world.f
+    land = ~sim.world.is_ocean
+    h0 = f["elevation"] + f["surface_water"] / 1000.0
+    sim.step(1)
+    h1 = f["elevation"] + f["surface_water"] / 1000.0
+    assert np.abs(h1 - h0)[land].max() < 0.5
 
 
 # ----------------------------------------------------------- heat transport

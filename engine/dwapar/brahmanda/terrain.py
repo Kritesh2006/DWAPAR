@@ -13,7 +13,7 @@ from .world import Terrain
 
 # Thresholds (documented in WORLD_LAWS.md)
 LAKE_DEPTH_MM = 1500.0      # standing water deeper than 1.5 m on land
-RIVER_FLUX_MM_H = 4.0      # sustained outflow (tile-normalised) marking a channel
+RIVER_FLUX_MM_H = 0.6      # sustained outflow ≈ top 2 % of land: draining ~25× the tile's own rainfall
 WETLAND_WATER_MM = 80.0
 WETLAND_SOIL = 0.85
 SNOW_SWE_MM = 20.0

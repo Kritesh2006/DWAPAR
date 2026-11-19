@@ -54,12 +54,13 @@ DIURNAL_LAND_C = 16.0
 DIURNAL_WATER_C = 3.0
 INFILTRATION_MM_H = 8.0
 SOIL_OVERFLOW = 0.95       # soil above this fraction of capacity spills to surface
-PERCOLATION_H = 0.01       # fraction of soil water above 50 % capacity percolating per hour
+PERCOLATION_H = 0.01       # fraction of soil water above 35 % capacity percolating per hour
 SPRING_H = 0.0002          # fraction of groundwater discharging to the surface per hour (~200-day e-folding)
 CAPILLARY_H = 0.0008
 AQUIFER_POROSITY = 0.2
-GW_LATERAL_FRACTION = 0.2  # per day, of the water-table head difference
-FLOW_FRACTION = 0.45
+GW_LATERAL_FRACTION = 0.2  # per day, of the water-table head difference (pairwise stability cap)
+GW_LATERAL_MOBILE = 0.005  # at most 0.5 % of a tile's groundwater moves laterally per day (~mm/day Darcy flux)
+FLOW_FRACTION = 0.05       # ≤ 1/(2·8 donors): receiver cannot be overfilled by eight simultaneous donors
 MFD_EXPONENT = 4.0
 PRECIP_EFFICIENCY = 0.5
 SNOW_THRESHOLD_C = 0.5
@@ -70,10 +71,10 @@ SPREAD_P_H = 0.12
 VEG_GROWTH_DAY = 0.035
 VEG_MORTALITY_DAY = 0.0006
 DECOMP_DAY = 0.0015
-EROSION_K = 1.0e-4         # transport capacity coefficient (m/day per √(mm/h) per unit slope)
+EROSION_K = 2.0e-6         # transport capacity coefficient (m/day per √(mm/h) per unit slope)
 DEPOSITION_FRACTION = 0.5
 TALUS_SLOPE = 0.25
-THERMAL_K = 2.0e-5
+THERMAL_K = 2.0e-7          # talus creep: ~0.1 m/yr on a 45° slope
 COAST_MIN_M = 0.5
 QUAKE_LOAD_YEARS = 30.0    # years for a fully active boundary to load to failure
 VOLCANO_RECURRENCE_YEARS = 60.0
@@ -236,7 +237,7 @@ class Prakriti:
         f["soil_water"] -= spill
         f["surface_water"] += spill
         gw, gcap = f["groundwater"], f["aquifer_capacity"]
-        perc = np.where(land, np.minimum(np.maximum(f["soil_water"] - 0.5 * fc, 0.0) * min(1.0, PERCOLATION_H * dt),
+        perc = np.where(land, np.minimum(np.maximum(f["soil_water"] - 0.35 * fc, 0.0) * min(1.0, PERCOLATION_H * dt),
                                          np.maximum(gcap - gw, 0.0)), 0.0)
         f["soil_water"] -= perc
         gw += perc
@@ -357,7 +358,7 @@ class Prakriti:
         """Aquifer water flows down the water-table gradient; discharge into the sea becomes ocean water."""
         f = w.f
         head = f["elevation"] + f["groundwater"] / 1000.0 / AQUIFER_POROSITY
-        delta, _ = mfd_flow(head, f["groundwater"] * 0.5, GW_LATERAL_FRACTION, 1000.0 * AQUIFER_POROSITY,
+        delta, _ = mfd_flow(head, f["groundwater"] * GW_LATERAL_MOBILE, GW_LATERAL_FRACTION, 1000.0 * AQUIFER_POROSITY,
                             self.cfg.tile_size_m, 1.0)
         gw = np.maximum(f["groundwater"] + delta, 0.0)
         f["surface_water"] += np.where(ocean, gw, 0.0)  # submarine groundwater discharge
@@ -378,7 +379,9 @@ class Prakriti:
         f, meta = w.f, w.meta
         rho_a = self.tile_area * ROCK_DENSITY_T_M3  # tonnes per metre of elevation on one tile
         elev = f["elevation"]
-        direction, drop, slope = steepest_descent(elev, self.cfg.tile_size_m)
+        # Slopes are measured to base level: a coastal tile sees the sea surface (0 m), not the sea floor,
+        # otherwise every shoreline would register as a hundreds-of-metres cliff and collapse continuously.
+        direction, drop, slope = steepest_descent(np.maximum(elev, 0.0), self.cfg.tile_size_m)
         cover = np.clip(f["biomass"] / 10.0, 0, 1)
         capacity_t = EROSION_K * np.sqrt(np.maximum(f["flow_flux"], 0)) * slope * (1.0 - 0.8 * cover) * rho_a
         still = (~land) | (f["surface_water"] > 1500.0)  # sea and lakes trap everything
@@ -438,7 +441,7 @@ class Prakriti:
         f["tectonic_stress"][y0:y1, x0:x1] = patch * 0.05 * rng.random(patch.shape)
         mag = 4.6 + 0.9 * np.log10(1.0 + released) + 0.3 * rng.normal()
         # Landslides: shaking moves loose material off slopes into the sediment load downslope.
-        direction, drop, slope = steepest_descent(f["elevation"], self.cfg.tile_size_m)
+        direction, drop, slope = steepest_descent(np.maximum(f["elevation"], 0.0), self.cfg.tile_size_m)
         yy, xx = np.indices(critical.shape)
         r = 2 + int(max(0.0, mag - 5.0) * 2)
         zone = ((yy - y) ** 2 + (xx - x) ** 2 <= r * r) & (slope > 0.03) & (direction >= 0) & ~w.is_ocean

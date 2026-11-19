@@ -59,6 +59,24 @@ def _elevation(cfg: WorldConfig) -> np.ndarray:
     return out
 
 
+def relax_slopes(elev: np.ndarray, tile_size_m: float, max_slope: float = 0.45, iterations: int = 40) -> np.ndarray:
+    """Geological pre-history: let over-steep generated slopes collapse to a stable angle.
+
+    Mass-conserving (material moves to the steepest downslope neighbour). Slopes are measured to
+    sea level for coastal tiles. Without this, raw noise leaves ~45° 2-km cliffs that the talus
+    law would erode at metres per year once the clock starts."""
+    from ..grid import move_along
+    e = elev.copy()
+    for _ in range(iterations):
+        d, drop, slope = steepest_descent(np.maximum(e, 0.0), tile_size_m)
+        excess = np.where((slope > max_slope) & (e > 0) & (d >= 0), (slope - max_slope) * tile_size_m * 0.25, 0.0)
+        if not excess.any():
+            break
+        amount = np.minimum(excess, np.maximum(e - 0.5, 0.0))
+        e = e + move_along(amount, d)
+    return e
+
+
 def _latitude(cfg: WorldConfig) -> np.ndarray:
     lat = np.linspace(cfg.lat_top, cfg.lat_bottom, cfg.height)
     return np.repeat(lat[:, None], cfg.width, axis=1)
@@ -126,7 +144,7 @@ def _flow_accumulation(routing: np.ndarray, weight: np.ndarray, tile_size_m: flo
 
 def generate_world(cfg: WorldConfig) -> World:
     s, w, h = cfg.seed, cfg.width, cfg.height
-    elev = _elevation(cfg)
+    elev = relax_slopes(_elevation(cfg), cfg.tile_size_m)
     ocean = elev < 0
     lat = _latitude(cfg)
     lat_rad = np.deg2rad(lat)
