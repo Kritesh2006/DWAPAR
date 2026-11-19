@@ -1,0 +1,12 @@
+__pycache__/
+*.pyc
+.pytest_cache/
+*.egg-info/
+data/
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm
+dashboard/node_modules/
+dashboard/dist/
+.venv/
+.DS_Store
