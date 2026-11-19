@@ -35,12 +35,12 @@ Status legend: ✅ done and tested · 🟡 partial · ⬜ not started
 | Integrity | Laws versioning; old checkpoints preserved; versions separated | ✅ | `test_laws_history_records_continuation`; `experiments/laws-1.5` unchanged |
 | 3D | Three.js world explorer from engine data | ✅ | Playwright `3D world renders the engine terrain with WebGL` |
 | 3D | Terrain textures, vegetation, water shaders, atmosphere, camera controls | ✅ | visual review (screenshots in JOURNAL) |
-| CI | GitHub Actions: Linux, Windows (incl. .bat scripts), dashboard | ✅ | run 44626326913 green |
+| CI | GitHub Actions: Linux, Windows (incl. .bat scripts), dashboard | ✅ | final run 44630830532 green |
 | Tests | Automated dashboard tests (Vitest 9, Playwright 6) | ✅ | `npm run test:unit`, `npm run test:e2e` |
 | Experiment | Laws-1.6 runs: genesis seed2026-64 and continuation from laws-1.5 year 100 | 🟡 | both 110 years (100-y milestone ✅); 1,000 y pending |
 
 ## Last verified (session 4)
-- Engine: `pytest` **99 passed** (189 s, local). CI run 44626326913 (`e1ed88a`): Linux, Windows (incl. .bat scripts) and dashboard jobs all green.
+- Engine: `pytest` **99 passed** (local). Final CI run 44630830532 (`aae4caa`): Linux, Windows (incl. .bat scripts) and dashboard (type-check, Vitest 9, Playwright 7) all green.
 - Dashboard: strict type-check and build clean; Vitest 9 passed; Playwright 6 passed (local);
   Playwright 7 passed after the layout fix.
 
