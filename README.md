@@ -8,6 +8,11 @@ autonomous artificial civilization. **Phase 1 builds only the world**: terrain,
 climate, water, vegetation, fire, erosion, resources and time. It contains no
 inhabitants, agents or animals.
 
+![Drishti observer dashboard showing seed 42 at Year 1, Day 234: terrain map with rivers and lakes, tile inspector, environment statistics, historical charts, resource table, natural event timeline and checkpoint archive](docs/images/drishti-dashboard.jpg)
+
+*The Drishti observatory monitoring world seed 42 at Year 1, Day 234 (autumn). Every value is live engine
+state; the fire spike in the history chart is a real lightning-ignited wildfire season.*
+
 ## Quick start
 
 Requirements: Python ≥ 3.10, Node ≥ 18 (only to build the dashboard). Everything is

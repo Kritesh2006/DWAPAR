@@ -44,3 +44,14 @@ showing live state.
 
 **Next**: MFD routing; horizontal heat transport; sediment deposition; optional spin-up;
 CI; dashboard UI tests. Phase 2 requires explicit owner authorisation.
+
+## Session 2 — 2026-11-19 · Publication to GitHub
+
+- Connected the local repository to https://github.com/Kritesh2006/dwapar (remote was empty:
+  no branches, no commits). Pushed `main` with the full Phase 1 history; no force-push.
+- Pre-push audit: 57 tracked files, no secrets, credentials, caches, virtual environments,
+  `node_modules`, builds or databases.
+- Added the dashboard screenshot (`docs/images/drishti-dashboard.jpg`) to README.md and a
+  `CLAUDE.md` naming this repository as the single source of truth for future sessions.
+- Re-ran the test suite before pushing (result recorded in TASKS.md).
+- No engine or world changes this session. Phase 2 not started.

@@ -18,7 +18,7 @@ Status legend: ✅ done and tested · 🟡 partial · ⬜ not started
 | 10 | No intelligent inhabitants | ✅ | `test_no_inhabitants_exist`; prana and buddhi empty |
 
 ## Last verified test run
-`cd engine && pytest`: **64 passed in 15.0 s**; also 64 passed in a fresh venv via `pip install -e ".[dev]"` (Python 3.13.18, numpy 2.5.3, 2026-11-19).
+`cd engine && pytest`: **64 passed in 15.0 s**; also 64 passed in a fresh venv via `pip install -e ".[dev]"`; re-run before the GitHub push: 64 passed in 17.5 s (Python 3.13.18, numpy 2.5.3, 2026-11-19).
 Dashboard: `npm run build` passes strict TypeScript with no errors.
 
 ## Measured performance (2-core cloud container, `python -m dwapar bench`)
@@ -39,5 +39,5 @@ Under `serve` at max speed, with the dashboard polling, measured throughput was
   Consider an optional generation-time spin-up.
 - 🟡 Atmosphere wraps periodically at map edges while land and water do not.
 - ⬜ Dashboard has no automated UI tests (verified manually via headless screenshots).
-- ⬜ CI workflow (GitHub Actions) not yet added.
+- ⬜ CI workflow (GitHub Actions) not yet added. Repository: https://github.com/Kritesh2006/dwapar (main).
 - ⬜ Generation's Python-loop priority-flood is the 512² bottleneck.
