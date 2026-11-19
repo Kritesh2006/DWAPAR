@@ -153,7 +153,9 @@ checkpoints and separate experiments by laws version.
 4. A test caught my narrow-screen CSS hiding the motto (required branding).
 5. **CI caught a real layout bug the local tests missed:** with the CI machine's fonts the top bar
    wrapped and covered the panel tabs. Panels are now positioned from the measured bar height;
-   a new test checks 1280/1440/1920 px.
+   a new test checks 1280/1440/1920 px. That test then failed once in CI (run 44630138226) by
+   reading the layout before it settled. It exposed a one-frame overlap: the bar is now measured
+   before the first paint and on font load, and the test waits for layout to settle.
 6. **Discovered while continuing the laws-1.5 world:** the laws-1.5 sea surface was not level
    (−10 … +113 m), because ocean water equalised only diffusively. It inflated the 1.5
    "lakes fill basins" finding. That finding is corrected in EXPERIMENTS.md.
@@ -162,7 +164,7 @@ checkpoints and separate experiments by laws version.
 - Engine: 99 passed (local).
 - Dashboard: build clean; Vitest 9 passed; Playwright 7 passed (local).
 - CI run 44626326913 on `e1ed88a`: all three jobs green (Linux, Windows scripts + tests,
-  dashboard).
+  dashboard). The final run's result is recorded in TASKS.md.
 
 **Experiments (laws 1.6, physics commit 2498ae7):**
 - 110 years from genesis (seed 2026, 64²) and 110 years continuing the laws-1.5 year-100 world.

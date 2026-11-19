@@ -1,4 +1,4 @@
-import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, lazy, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { api, wsUrl, type Frame, type Stats, type Status, type WorldEvent } from "./api";
 import { HEATMAPS, RESOURCE_NAMES, cssGradient, resourceStyle } from "./colormaps";
 import HistoryChart from "./components/HistoryChart";
@@ -38,16 +38,22 @@ export default function App() {
   const bar = useRef<HTMLElement>(null);
   const [barBottom, setBarBottom] = useState(78);
   // Panels sit below the *measured* top bar: fonts differ between machines and the bar may wrap.
-  useEffect(() => {
+  // Measured synchronously before the first paint (no frame with overlapping panels), then kept
+  // up to date as the bar resizes (window width, font loading).
+  useLayoutEffect(() => {
     const el = bar.current;
     if (!el) return;
-    const ro = new ResizeObserver(() => {
+    const apply = () => {
       const b = Math.ceil(el.getBoundingClientRect().bottom) + 8;
       setBarBottom(b);
       document.documentElement.style.setProperty("--bar-bottom", `${b}px`);
-    });
+    };
+    apply();
+    const ro = new ResizeObserver(apply);
     ro.observe(el);
-    return () => ro.disconnect();
+    window.addEventListener("resize", apply);
+    document.fonts?.ready.then(apply).catch(() => {});
+    return () => { ro.disconnect(); window.removeEventListener("resize", apply); };
   }, []);
   const view3d = useRef<View3DHandle>(null);
   const [dim, setDim] = useState<"2d" | "3d">(() => (localStorage.getItem("drishti.view") === "3d" ? "3d" : "2d"));

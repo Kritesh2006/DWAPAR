@@ -71,10 +71,14 @@ test("panels are never covered by the top bar, at any width", async ({ page }) =
   for (const width of [1280, 1440, 1920]) {
     await page.setViewportSize({ width, height: 900 });
     await page.goto("/");
-    const barBox = await page.locator("header.bar").boundingBox();
+    await page.evaluate(() => document.fonts.ready);
     for (const sel of [".dock.left", ".dock.right"]) {
-      const box = await page.locator(sel).boundingBox();
-      expect(box!.y, `${sel} at ${width}px`).toBeGreaterThanOrEqual(barBox!.y + barBox!.height);
+      // Layout settles after fonts load; the dock must end up fully below the bar.
+      await expect.poll(async () => {
+        const bar = (await page.locator("header.bar").boundingBox())!;
+        const box = (await page.locator(sel).boundingBox())!;
+        return box.y - (bar.y + bar.height);
+      }, { message: `${sel} at ${width}px`, timeout: 5_000 }).toBeGreaterThanOrEqual(0);
     }
     await page.getByRole("button", { name: "Disasters", exact: true }).click({ timeout: 5_000 });
   }
