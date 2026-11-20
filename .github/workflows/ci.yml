@@ -70,7 +70,7 @@ jobs:
   dashboard:
     name: Dashboard (types, unit, end-to-end)
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5

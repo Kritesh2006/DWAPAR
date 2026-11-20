@@ -56,7 +56,7 @@ export default function App() {
     return () => { ro.disconnect(); window.removeEventListener("resize", apply); };
   }, []);
   const view3d = useRef<View3DHandle>(null);
-  const [dim, setDim] = useState<"2d" | "3d">(() => (localStorage.getItem("drishti.view") === "3d" ? "3d" : "2d"));
+  const [dim, setDim] = useState<"2d" | "3d">(() => { try { return localStorage.getItem("drishti.view") === "2d" ? "2d" : "3d"; } catch { return "3d"; } });
   useEffect(() => { try { localStorage.setItem("drishti.view", dim); } catch { /* storage unavailable */ } }, [dim]);
   const fetching = useRef(false);
   const lastFrame = useRef({ tick: -1, world: -1, key: "", at: 0, elevAt: -1e9 });
@@ -162,7 +162,7 @@ export default function App() {
           insets={{ left: 206, right: 352, top: barBottom, bottom: drawer ? 236 : 54 }} onSelect={(x, y) => { setSelected({ x, y }); setTab("inspect"); }} />
       ) : (
         <Suspense fallback={<div className="stage-empty">Loading the 3D world…</div>}>
-          <WorldView3D ref={view3d} frame={frame} mode={mode} simHoursPerSecond={simHps}
+          <WorldView3D ref={view3d} frame={frame} mode={mode} seed={status?.seed ?? 1} simHoursPerSecond={simHps}
             windMean={windRows.length ? windRows.reduce((a, b) => a + b, 0) / windRows.length : 0}
             onSelect={(x, y) => { setSelected({ x, y }); setTab("inspect"); }} />
         </Suspense>

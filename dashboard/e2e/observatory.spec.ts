@@ -23,8 +23,10 @@ async function canvasVariety(page: Page, selector: string): Promise<number> {
   }, selector);
 }
 
-test.beforeEach(async ({ page }) => {
-  await page.addInitScript(() => localStorage.setItem("drishti.view", "2d"));
+// The 3D world is the default view; the 2D tests opt into the flat map (except the 3D test itself).
+test.beforeEach(async ({ page }, info) => {
+  if (!info.title.startsWith("3D")) await page.addInitScript(() => localStorage.setItem("drishti.view", "2d"));
+  else await page.addInitScript(() => localStorage.setItem("drishti.quality", "low")); // software GL in CI
 });
 
 test("observatory loads live engine state", async ({ page }) => {
@@ -99,15 +101,26 @@ test("2D capture downloads a PNG", async ({ page }) => {
   expect(dl.suggestedFilename()).toMatch(/^dwapar-seed11-tick\d+\.png$/);
 });
 
-test("3D world renders the engine terrain with WebGL", async ({ page }) => {
+test("3D world is the default view and can be explored down to the ground", async ({ page }) => {
+  test.setTimeout(300_000); // CI renders WebGL in software (SwiftShader): seconds per frame
   const errors = trackErrors(page);
   await page.goto("/");
-  await page.getByRole("button", { name: "3D world" }).click();
   await expect(page.locator(".stage.three canvas")).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByRole("button", { name: "3D world" })).toHaveClass(/on/);
   await expect(page.locator(".cam3d")).toContainText("Relief");
-  await expect.poll(() => canvasVariety(page, ".stage.three canvas"), { timeout: 45_000 }).toBeGreaterThan(60);
-  await page.locator(".cam3d input[type=range]").fill("14");
-  await page.getByRole("button", { name: "Overview" }).click();
+  await expect(page.locator(".cam3d .honesty")).toContainText("Simulated at 2 km per tile");
+  await expect.poll(() => page.evaluate(() => (window as unknown as { __dwapar3d?: { stats: { chunks: number } } }).__dwapar3d?.stats.chunks ?? 0), { timeout: 60_000 }).toBeGreaterThan(0);
+  await expect.poll(() => canvasVariety(page, ".stage.three canvas"), { timeout: 60_000 }).toBeGreaterThan(60);
+  await page.getByLabel("Show simulation grid").check();
+  await page.getByLabel("Procedural detail").uncheck();
+  await page.getByLabel("Procedural detail").check();
+  await page.locator(".cam3d input[type=range]").fill("1.5");
+  await expect(page.locator(".cam3d")).toContainText("Relief ×1.5");
+  await page.getByRole("button", { name: "Ground", exact: true }).click();
+  await expect.poll(() => page.evaluate(() => (window as unknown as { __dwapar3d: { stats: { altitude: number } } }).__dwapar3d.stats.altitude), { timeout: 60_000 }).toBeLessThan(3);
+  await page.screenshot({ path: "test-results/world-3d-ground.png" });
+  await page.getByRole("button", { name: "Orbit", exact: true }).click();
+  await expect.poll(() => page.evaluate(() => (window as unknown as { __dwapar3d: { stats: { altitude: number } } }).__dwapar3d.stats.altitude), { timeout: 60_000 }).toBeGreaterThan(20_000);
   await expect(page.locator(".cam3d")).toContainText("sun");
   await page.screenshot({ path: "test-results/world-3d.png" });
   expect(errors).toEqual([]);

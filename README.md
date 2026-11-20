@@ -11,8 +11,8 @@ artificial civilization. The world comes first.
 - **Phase 1** built the world: terrain, climate, water, vegetation, fire, erosion, resources and time.
 - **Phase 1.5** ("The Age Before Life", current) deepens its laws: river networks, ocean currents,
   groundwater, sediment, tectonics, volcanoes, glaciers, and a dynamic sea level with moving
-  coastlines. It also runs the world for long periods to test its stability, and adds an
-  explorable 3D view. The current physics is **laws version 1.6**.
+  coastlines. It also runs the world for long periods to test its stability, and adds a
+  true-scale 3D world you can explore from orbit to ground level. The current physics is **laws version 1.6**.
 
 There are no organisms, inhabitants, agents or animals.
 
@@ -87,18 +87,47 @@ file to start a fresh world.
 
 ## The observatory (Drishti)
 
-Switch between **2D map** and **3D world** in the top bar.
+The observatory opens in the **3D world**; the flat **2D map** is one click away in the top bar.
 
-**3D world.** Fly over the planet built from the engine's own data:
-- **Terrain:** real elevation, adjustable relief, with snow and glaciers from the engine's stores.
-- **Water:** the ocean at the dynamic sea level (depth-tinted from the actual sea floor, with
-  waves, glints and surf), plus lakes and flowing rivers.
-- **Vegetation:** forests whose density and type come from the biomass field and temperature
-  (vegetation is a continuous field, not organisms).
-- **Sky:** a physical sky with the sun placed by the world's date, hour and latitude, plus cloud
-  decks from the humidity field, and fire and lava glow.
-- **Controls:** drag to orbit, right-drag to pan, wheel to zoom, WASD to fly, Q/E to turn, click
-  to inspect.
+![The 3D world at low altitude: rolling forested land with a river, fading into haze toward distant hills](docs/images/3d-low-flight.jpg)
+
+**3D world.** A true-scale (1 unit = 1 m) world you can explore from orbit down to standing on the
+ground. The simulation runs on 2 km tiles; the view adds detail *below* that scale without
+pretending it is simulated:
+
+| Simulated (engine data) | Rendering only (deterministic, seeded, never fed back) |
+|---|---|
+| Elevation of every 2 km tile, sea level, lake levels | Relief finer than a tile (zero-mean, calmed in river valleys, zero at coastlines) |
+| River discharge and flow directions | The winding course and width of each river between tile centres |
+| Vegetation biomass, moisture, temperature, snow, glacier ice, deserts, wetlands | Individual trees, rocks and grass tufts placed *from* those fields |
+| Clouds, rain, fire, lava, the sun's position | Cloud texture, waves, foam, haze |
+
+- **Multiresolution terrain:** a quadtree of GPU-displaced chunks, from 512 m vertex spacing at
+  orbit down to 4 m at your feet, with physically based surfaces blended by slope, altitude and
+  the simulated fields (rock, grass, forest canopy and forest floor, sand, desert, wetland, snow,
+  ice).
+- **Water:** the ocean at the engine's dynamic sea level, tinted by the real sea-floor depth, with
+  waves, sky reflections and surf. Lakes sit at their simulated level. Rivers are ribbons traced
+  along the engine's flow directions, with width from discharge (w ≈ 4·Q^½).
+- **Ground cover:** conifers or broadleaf trees from biomass and temperature, with a treeline;
+  rocks on steep and high ground; grass in open country. All are placed deterministically, so the
+  same place always looks the same.
+- **Sky:** a physical sky with the sun at the world's date, hour and latitude; sun shadows; haze
+  that thins with altitude; cloud cover from the engine's cloud field.
+- **Honesty controls:** *Show simulation grid* outlines the real 2 km tiles. *Procedural detail* off
+  shows the bare simulated surface. A permanent note says what is simulated. *Daylight* is a
+  labelled viewing aid that overrides the simulated hour.
+- **Controls:** presets *Orbit · Region · Low flight · Ground*.
+  - Drag to orbit around the point under the cursor; near the ground, drag looks around.
+  - Right-drag to pan, wheel to fly toward the cursor.
+  - WASD to move (you walk on the terrain at eye height), R/F up/down, Q/E turn, Shift faster.
+  - Click to inspect.
+- **Quality:** low / medium / high. It steps down automatically if the frame rate stays below 24 fps.
+
+| From orbit | At ground level |
+|---|---|
+| ![Satellite-like view of the whole simulated world: forest patchwork, deserts, lakes and broken cloud](docs/images/3d-orbit.jpg) | ![Standing in a broadleaf wood on a hillside, eye height 1.7 m](docs/images/3d-ground.jpg) |
+| ![The real 2 km simulation tiles outlined over the 3D landscape](docs/images/3d-simulation-grid.jpg) | ![Air-temperature heatmap draped over the 3D relief, with lakes and the river network](docs/images/3d-heatmap-temperature.jpg) |
 
 **2D map** and the panels around both views:
 

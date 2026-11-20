@@ -157,16 +157,19 @@ geometry is evaluated per latitude row; fire spread is skipped when nothing burn
 fingerprints were unchanged. A/B best-of-6 at 128²: 6.93 → 5.45 ms/tick (−21 %). The new laws-1.6
 processes then add about 0.3 ms/tick.
 
-**3D explorer** (`dashboard/src/render3d/World3D.ts`, lazily loaded). A Three.js r170 scene built
-only from engine frames:
-- terrain mesh (one vertex per tile, adjustable relief exaggeration);
-- `MeshStandardMaterial` patched with procedural detail, slope rock, beach and snow/ice;
-- ocean `ShaderMaterial` at the engine sea level, with a depth texture from the real sea floor;
-- lake surface mesh, instanced forests, river-flow particles, fire/lava sprites;
-- Preetham `Sky`, with the sun from the engine date, hour and latitude (same formulas as
-  `solar.py`, unit-tested);
-- cloud decks from the humidity field;
-- OrbitControls plus keyboard flight and raycast picking.
+**3D world** (`dashboard/src/render3d/`, lazily loaded, the default view). Three.js r170, true
+scale (1 unit = 1 m), logarithmic depth buffer. It is built only from engine frames and never
+writes to the engine.
+
+| Module | Role |
+|---|---|
+| `heightfield.ts` | The shared height function, in TypeScript (CPU) and GLSL (GPU) with the same formulas: `H = macro − riverCarve + detail`. **macro** is a Catmull-Rom interpolation of the engine's 2 km elevations; it passes exactly through every tile centre (unit-tested). **detail** is deterministic value noise, 12 octaves from 3.2 km to 1.6 m, seeded by the world seed. Its amplitude comes from height above sea (plains, hills, mountains), it is zero at the coastline, calmed by 95 % along river valleys and lake beds, and zero-mean (the bias of ridged noise is measured and removed). Beyond the map edge the ground sinks to −1.5 km over 14 km. Also `fieldWarp` (organic, under one tile, used for looking up surface fields) and `canopyFrac` (tree cover, shared by the shader and tree placement). |
+| `hydro.ts` | Hydrography from simulated water. Rivers are tiles with discharge ≥ 0.6 mm/h, linked along engine flow directions, smoothed with deterministic meanders (≤ 0.22 tile), and given width from discharge. Lakes are connected lake tiles at their median engine water level. Rasterises a channel/valley mask texture. |
+| `terrain.ts` | Quadtree LOD. One shared 32×32 grid with skirts is placed and scaled per chunk (leaf 128 m = 4 m spacing; never coarser than ~half a tile). Height and normals are computed in a patched `MeshStandardMaterial` vertex shader; each LOD level skips octaves it cannot represent. The fragment shader blends surfaces from slope, altitude and the simulated fields, adds close-range albedo and bump detail, and draws optional heatmap and simulation-grid overlays. A patched depth material casts shadows. |
+| `water.ts` | Ocean plane at the engine sea level, tinted by depth (Gerstner-style wave normals, foam in the shallows, PMREM sky reflections). Lake planes clipped to the engine lake mask. River ribbons with a minimum on-screen width, flow-scrolled ripples, a water level that never runs uphill, and a small distance-based lift so coarse distant terrain cannot hide them. |
+| `scatter.ts` | Trees, rocks and grass near the camera, in cells keyed by the world seed. Density, species, size, treeline and exclusions (sea, lakes, river channels, snow, deserts, steep slopes) come from the simulated fields at that spot. Instanced leaf-card trees use a procedurally drawn leaf and needle atlas, in near and far LODs, with wind sway. |
+| `controls.ts` | Free-flight camera. Orbit around the ground under the cursor, look around when near the ground, grab-pan, wheel fly-to-cursor, and WASD with speed scaled by height. Terrain-following walk at 1.7 m eye height, collision, and wall-clock fly-to animations. |
+| `World3D.ts` | Orchestrator. Field and elevation textures; river network rebuilt only when the river tiles change (at most once a minute while running); sky, environment map and sun from the engine calendar (`sunVector`, unit-tested); camera-following shadow frustum; altitude-dependent haze; cloud deck whose covered fraction matches the engine's cloud cover; CPU ray-march picking; quality presets with auto-downgrade; render statistics. |
 
 The renderer has its own animation loop and never writes to the engine.
 
@@ -175,4 +178,5 @@ The renderer has its own animation loop and never writes to the engine.
 - A Windows job that runs `setup.bat`, the engine tests, `start-headless.bat` and `start.bat` on a
   real Windows runner.
 - A dashboard job: type-check, build, Vitest unit tests, and Playwright end-to-end tests that
-  start a real engine and drive both the 2D map and the WebGL 3D world.
+  start a real engine and drive both the 2D map and the WebGL 3D world (including flying to
+  ground level and back, with any shader compile error failing the test).

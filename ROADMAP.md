@@ -25,6 +25,14 @@ Done in session 4:
 - Three.js 3D world explorer
 - CI on Linux and Windows; Vitest and Playwright dashboard tests
 
+Done in session 5 (visualisation only; laws unchanged):
+- True-scale multiresolution 3D world as the default view: quadtree GPU terrain with
+  rendering-only procedural detail, PBR surface blending, ocean, lakes and river ribbons.
+- Deterministic trees, rocks and grass derived from simulated fields.
+- Sky, shadows and haze.
+- Free-flight camera from orbit to eye height; quality presets.
+- Honesty controls (simulation grid, detail off).
+
 Remaining:
 - **Long-term experiments under laws 1.6** toward 1,000 → 10,000 years (EXPERIMENTS.md has
   progress and cost estimates). The 64² world needs ~6 h of CPU per 1,000 years.
@@ -36,8 +44,13 @@ Remaining:
   - Sea ice; cloud radiative effects; slow plate motion over >10⁶ years.
   - Spin-up long enough to remove the 1–4-year drying adjustment.
   - Lower elevation when stone is extracted (needed before Phase 2).
-- **3D explorer refinements.** Higher-resolution terrain via interpolated sub-tile vertices; true
-  river ribbons; volumetric clouds; LOD for 512² worlds.
+- **3D refinements.**
+  - Measure frame rates on real laptop GPUs and tune the presets.
+  - Volumetric clouds and cloud shadows.
+  - Waterfalls and rapids where rivers are steep.
+  - Seasonal leaf colour from the temperature field.
+  - Coastal cliffs.
+  - A web worker for tree placement.
 
 ## Phase 2 — Prana (life) — requires authorisation
 Organisms with metabolism drawing on the world's real energy and resources; reproduction with

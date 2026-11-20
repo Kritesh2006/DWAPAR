@@ -159,3 +159,43 @@ labelled as such in the code.
 The `.bat` files could not be tested in the Linux development environment. CI now executes
 `setup.bat`, `start-headless.bat` and `start.bat` on `windows-latest`. `DWAPAR_NO_PAUSE` and
 `DWAPAR_NO_BROWSER` exist only to make unattended runs possible.
+
+### D-031 Multiresolution procedural rendering, not bigger tiles
+A tile is 2 km wide. Smoothing or enlarging tiles cannot produce ground-level detail. Simulating
+finer tiles would multiply engine cost by about 250 000 for 4 m resolution. The view therefore
+renders `H = macro (simulation) − riverCarve + detail`:
+- the macro surface passes exactly through the simulated elevations;
+- the detail is deterministic, seeded, zero-mean and rendering-only, with consistency rules (zero
+  at coasts, calmed in valleys and lake beds, roughness from altitude);
+- the same function runs on the CPU, for collision, placement and picking, and on the GPU, for
+  drawing, and a test checks that the constants agree.
+
+GPU displacement on a quadtree of shared grid chunks keeps memory flat and needs no per-chunk
+geometry uploads.
+
+### D-032 Rendering-only objects are derived, labelled and switchable
+Trees, rocks, grass, river meanders, waves and cloud texture are not simulated objects and must
+never look like simulation output:
+- they are placed deterministically from simulated fields, so the same place always looks the same
+  and changes only when the simulation changes;
+- the UI says so permanently;
+- *Show simulation grid* and *Procedural detail* off reveal the simulated surface.
+
+Field lookups use an organic warp of under one tile, so tile boundaries do not render as
+squares. The terrain's distant canopy and the placed trees share one canopy function, so they
+agree. *Daylight* is an explicit viewing aid. The old representational "groves" (D-029) are
+replaced by these field-derived trees.
+
+### D-033 The 3D world is the default view
+The goal is a world that feels explorable, so the observatory opens in 3D. The 2D map remains one
+click away, and a stored preference wins. True scale (relief ×1) is the default; ×1–3 is
+available, labelled as exaggeration.
+
+### D-034 Quality presets with automatic downgrade; honest about unmeasured performance
+Development and CI render WebGL in software (SwiftShader), so frame rates there say nothing about
+a laptop GPU. The view exposes low, medium and high presets that control pixel ratio, shadow map
+size, LOD factor and scatter radii. It steps down after 5 s below 24 fps, and shows draw-call and
+triangle statistics. The geometry budget (about 0.2 M triangles at orbit, about 1–2.5 M near the
+ground at medium) is within what integrated GPUs handle. Real-hardware frame rates are still to
+be measured (TASKS.md).
+

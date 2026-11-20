@@ -183,3 +183,89 @@ checkpoints and separate experiments by laws version.
 - Profile again and consider compiled kernels with an explicit laws/engine note.
 - Connectivity-aware ocean.
 - 3D LOD and sub-tile detail.
+
+## Session 5 — An explorable world (visualisation only)
+
+**Request.** The visuals looked like a small, cartoonish terrain map. Requirements:
+- make the 3D world the default view;
+- realistic, satellite-like terrain, water and vegetation, explorable down to ground level;
+- multiresolution procedural detail that stays consistent with the simulation and is clearly
+  distinguished from it;
+- no changes to the laws, saves or determinism; no life.
+
+**Built** (dashboard only; the engine is untouched, so the laws remain 1.6):
+- A shared CPU/GPU height function: the simulated macro surface plus deterministic, zero-mean
+  procedural relief that vanishes at coasts and calms in valleys.
+- A quadtree LOD terrain displaced on the GPU, from 512 m to 4 m vertex spacing.
+- PBR surface blending driven by the simulated fields.
+- Ocean, lake and river-ribbon water.
+- Field-derived instanced trees (leaf cards from a procedurally drawn atlas), rocks and grass.
+- Sky and environment lighting, camera-following shadows, altitude haze, clouds matching engine
+  cover.
+- A free-flight camera with a terrain-following walk.
+- Quality presets with auto-downgrade, and honesty controls.
+
+Details: ARCHITECTURE.md; decisions D-031 to D-034.
+
+**How it was judged.** Screenshots in software WebGL at 1600×950 after every change, from orbit
+(182 km), region (11 km), low flight (380 m) and ground (1.7 m), plus coast, mountain, grid,
+detail-off and heatmap views. Each round was reviewed for what looked wrong; final images are in
+`docs/images/3d-*.jpg`.
+
+**What looked wrong, and the fix**
+1. First round:
+   - the cloud deck was opaque and hid the world;
+   - field textures showed the 2 km tiles as square blobs;
+   - rivers read as white roads;
+   - a hard line ran across the sky where the cloud plane's edge was seen edge-on;
+   - trees were cartoon cones and blobs with black trunks (the instance tint multiplied the bark);
+   - the forest floor was flat grey.
+
+   Fixes:
+   - cloud coverage set from the engine's cover fraction, with a horizon fade;
+   - an organic field warp (under one tile);
+   - rougher river water;
+   - leaf-card trees from a procedural leaf and needle atlas, with crown normals and bark excluded
+     from the tint;
+   - close-range albedo detail;
+   - a canopy function shared by the shader and tree placement.
+2. Deserts read as snow (too pale), so they were darkened. The map ended in a vertical wall, so
+   the ground now sinks into the sea beyond the edge (CPU and GPU).
+3. Mountains showed banding from the rock-strata pattern aliasing at distance; it now fades out.
+4. Rivers looked dashed from far away: distant chunks are too coarse to show the carved channel.
+   Ribbons now get a small distance-based lift.
+
+**Bugs found and fixed**
+- The page froze on load: the river-mask rasteriser applied a canvas blur filter on every one of
+  thousands of strokes. Each layer is now stroked sharp and blurred once.
+- Shader compile errors: `uTime` was undeclared in the water shader, and `out` is a reserved word
+  in GLSL. The screenshot harness now fails on any shader error, and the e2e test already fails on
+  console errors.
+- **A unit test caught a real bias:** ridged noise has mean 0.622, not 0.5, so procedural detail
+  raised mountains by about 76 m on average above the simulated elevation. Now recentred
+  (measured over 1.3 M samples), identically on CPU and GPU.
+- Camera teleports (presets, `setView`) inherited a stale "on the ground" state and snapped back to
+  the ground. A slow frame that completed a whole fly-to did the same.
+- Fly-to animations used clamped frame time and crawled on slow machines (3.6 min e2e); they now
+  use wall-clock time.
+- Elevation refreshes every few simulated days would have rebuilt the river network repeatedly.
+  It is now rebuilt only when the set of river tiles changes (at most once a minute while
+  running); otherwise only the elevation texture updates.
+
+**Tested**
+- Engine: 99 passed (local).
+- Dashboard: type-check and build clean; Vitest 22 passed (13 new for the 3D height function,
+  warp, canopy and hydrography); Playwright 7 passed (the 3D test now opens in 3D by default,
+  toggles grid and detail, flies to the ground and asserts eye height, then back to orbit).
+
+**Not measured.** Frame rate on a real Windows laptop GPU. Only software rendering is available
+here. The presets and auto-downgrade exist for this reason; the triangle and draw budgets are in
+TASKS.md.
+
+**Next**
+- Measure on real hardware and tune the presets.
+- Volumetric clouds and cloud shadows.
+- Seasonal foliage colour from temperature.
+- Waterfalls on steep river reaches.
+- Laws-1.6 experiments toward 1,000 years.
+

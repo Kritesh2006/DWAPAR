@@ -39,7 +39,27 @@ Status legend: ✅ done and tested · 🟡 partial · ⬜ not started
 | Tests | Automated dashboard tests (Vitest 9, Playwright 6) | ✅ | `npm run test:unit`, `npm run test:e2e` |
 | Experiment | Laws-1.6 runs: genesis seed2026-64 and continuation from laws-1.5 year 100 | 🟡 | both 110 years (100-y milestone ✅); 1,000 y pending |
 
-## Last verified (session 4)
+## Session 5 — 3D visualisation (laws unchanged, 1.6)
+
+| Area | Item | Status | Evidence |
+|---|---|---|---|
+| 3D | 3D world is the default view; 2D optional | ✅ | Playwright `3D world is the default view…` |
+| 3D | Multiresolution terrain (quadtree LOD, GPU displacement, 4 m at ground) with rendering-only detail | ✅ | Vitest `render3d.test.ts` (macro passes through tiles, zero at coast, zero-mean, calmed in valleys, CPU/GPU constants match); screenshots |
+| 3D | PBR surface blending by slope, altitude and simulated fields | ✅ | screenshots `docs/images/3d-*.jpg` |
+| 3D | Ocean at sea level, lakes at engine level, river ribbons from engine flow | ✅ | Vitest hydrography tests; screenshots |
+| 3D | Deterministic trees, rocks, grass from simulated fields | ✅ | screenshots (ground, coast canopy) |
+| 3D | Free-flight camera to ground level, collision, walk, presets | ✅ | Playwright flies Ground → Orbit; altitude asserted |
+| 3D | Sky, sun shadows, haze, clouds matching engine cover | ✅ | screenshots |
+| 3D | Honesty: simulation grid, procedural detail off, permanent note | ✅ | Playwright toggles; screenshots |
+| 3D | Quality presets + auto-downgrade + stats | ✅ | code; **laptop-GPU frame rate not measured** (software GL only) |
+
+## Last verified (session 5)
+- Engine: `pytest` **99 passed** (local); no engine code changed.
+- Dashboard: strict type-check and build clean; Vitest **22 passed**; Playwright **7 passed** (local, SwiftShader).
+- 3D screenshots reviewed: orbit, region (11 km), low flight (380 m), ground (1.7 m), coast, mountain, grid, detail-off and heatmap.
+- CI: recorded below after the push.
+
+## Previously verified (session 4)
 - Engine: `pytest` **99 passed** (local). Final CI run 44630830532 (`aae4caa`): Linux, Windows (incl. .bat scripts) and dashboard (type-check, Vitest 9, Playwright 7) all green.
 - Dashboard: strict type-check and build clean; Vitest 9 passed; Playwright 6 passed (local);
   Playwright 7 passed after the layout fix.
@@ -51,8 +71,12 @@ Status legend: ✅ done and tested · 🟡 partial · ⬜ not started
   redistribution (1.5: ~10⁻¹⁷/yr). It is negligible but grows linearly; watch it in millennial runs.
 - 🟡 Inland basins below sea level are treated as ocean (no connectivity test).
 - 🟡 Spin-up samples only 6 days per season, so worlds dry for 1–4 years before stabilising.
-- 🟡 The 3D view uses one vertex per tile, so relief is smooth but coarse at close range. Forests
-  and moonlight are representational.
+- 🟡 3D frame rate on real laptop GPUs is unmeasured. Development and CI use software WebGL (about
+  10 fps at 1600×950 regardless of preset). Geometry budget at medium: about 0.16 M triangles and
+  76 draw calls at orbit; 1.1–2.4 M triangles and 200–330 draw calls near the ground.
+- 🟡 3D: river ribbons are lifted up to 14 m at long range so coarse distant terrain cannot hide them.
+  Field lookups are warped by under one tile. Both are rendering-only and documented (D-032).
+- 🟡 3D: moonlight at night is representational; *Daylight* is a labelled viewing aid.
 - 🟡 Atmosphere wraps periodically at map edges while land and water do not.
 - ⬜ `resources.extract("stone")` does not lower elevation yet.
 - ⬜ 1,000- and 10,000-year milestones.

@@ -186,10 +186,19 @@ table.res { width: 100%; border-collapse: collapse; font-size: 11.5px; }
 
 /* 3D world */
 .stage.three canvas { cursor: grab; outline: none; width: 100% !important; height: 100% !important; }
-.cam3d { position: absolute; left: 206px; bottom: 246px; display: flex; gap: 12px; align-items: center; flex-wrap: wrap;
-  padding: 6px 12px; border-radius: 4px; z-index: 3; font-size: 11px; max-width: calc(100% - 580px); }
+.cam3d { position: absolute; left: 206px; bottom: 246px; display: flex; flex-direction: column; gap: 6px;
+  padding: 8px 12px; border-radius: 4px; z-index: 3; font-size: 11px; width: 380px; max-width: calc(100% - 580px); }
+.cam3d .row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
 .cam3d label { display: flex; align-items: center; gap: 5px; color: #cfc6b2; }
 .cam3d input[type="range"] { accent-color: var(--gold); width: 90px; }
+.cam3d select { background: #0c0b09; color: #e8dfca; border: 1px solid #3a3326; border-radius: 3px; font-size: 11px; padding: 1px 4px; }
+.cam3d .presets button { padding: 3px 9px; }
+.cam3d .alt { margin-left: auto; color: var(--gold); }
+.cam3d .toggles3d { gap: 4px 12px; }
+.cam3d .honesty { color: #b9a77d; font-size: 10.5px; line-height: 1.35; border-left: 2px solid var(--gold); padding-left: 7px; }
+.cam3d .help { font-size: 10px; line-height: 1.35; }
+.cam3d .stats3d { font-size: 10px; }
+.cam3d button.link { background: none; border: none; color: #b9a77d; text-decoration: underline; padding: 0; cursor: pointer; font-size: 10.5px; }
 .drawer-closed .cam3d { bottom: 64px; }
 .dimseg button { padding: 4px 10px; }
 
