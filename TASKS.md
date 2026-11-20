@@ -57,7 +57,7 @@ Status legend: ✅ done and tested · 🟡 partial · ⬜ not started
 - Engine: `pytest` **99 passed** (local); no engine code changed.
 - Dashboard: strict type-check and build clean; Vitest **22 passed**; Playwright **7 passed** (local, SwiftShader).
 - 3D screenshots reviewed: orbit, region (11 km), low flight (380 m), ground (1.7 m), coast, mountain, grid, detail-off and heatmap.
-- CI: recorded below after the push.
+- CI run 44648353886 on `6505f80`: Linux, Windows (incl. .bat scripts) and dashboard (type-check, Vitest 22, Playwright 7 incl. the 3D ground-level test) all green on the first attempt.
 
 ## Previously verified (session 4)
 - Engine: `pytest` **99 passed** (local). Final CI run 44630830532 (`aae4caa`): Linux, Windows (incl. .bat scripts) and dashboard (type-check, Vitest 9, Playwright 7) all green.
