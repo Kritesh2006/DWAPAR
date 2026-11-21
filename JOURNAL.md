@@ -336,9 +336,14 @@ assuming the code was right.
     - The old "prana/buddhi must be empty" test had become hollow. It was replaced with "no life
       without a recorded command".
 
+11. **My process error, caught by CI (run 44930749680).** I bumped the engine version to 0.4.0
+    after the full local run, and an API test pins the version string. The first push failed on
+    Linux and Windows: 1 failed, 112 passed. The test was updated and the full suite re-run on the
+    exact commit.
+
 **Tested**
-- Engine: 113 passed (99 pre-existing including golden fingerprints, so lifeless worlds are
-  bit-identical; 14 new).
+- Engine: 113 passed on the final commit (99 pre-existing including golden fingerprints, so
+  lifeless worlds are bit-identical; 14 new).
 - The tiger, flight, replay and mid-day-restore tests also pass on seeds 3, 19 and 123.
 - Dashboard: type-check and build clean; Vitest 22; Playwright 8 (new: WITNESS converses and its
   act creates 12 deer in the engine).
