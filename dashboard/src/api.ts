@@ -149,7 +149,50 @@ export function decode(b64: string, dtype: string): Float32Array | Uint8Array {
   return dtype === "uint8" ? bytes : new Float32Array(bytes.buffer);
 }
 
+export interface WitnessMessage { id?: number; tick: number; speaker: "witness" | "creator"; text: string; data?: Record<string, unknown> }
+export interface WitnessGoal { id: number; kind: string; text: string; status: string; stage: number; created_tick: number; notes: string[] }
+export interface WitnessState {
+  name: string; awakened_tick: number; introduced: boolean; autonomy: boolean; acting_now: boolean;
+  engine_running: boolean | null; immortal: boolean; cycles: number;
+  directives: { protect_environment: boolean; intervention: "none" | "gentle" | "active"; may_create_life: boolean; may_create_humans: boolean };
+  goals: WitnessGoal[];
+  pending_verifications: { seq: number; kind: string; tick: number; check_tick: number; reason: string }[];
+  action_values: Record<string, { n: number; mean: number }>;
+  attention: { x: number; y: number; tick: number } | null;
+}
+export interface WitnessMemory { id: number; tick: number; kind: string; text: string; importance: number }
+export interface DivineCommand {
+  seq: number | null; tick: number; issuer: string; kind: string; params: Record<string, unknown>;
+  reason: string; status: string; result: Record<string, unknown>; text: string;
+}
+export interface LifeSummary {
+  life_version: string; animals: Record<string, number>; animals_total: number; humans: number; humans_adult: number;
+  families: number; shelters: number; shelters_in_progress: number; mean_skills: Record<string, number>;
+  births: Record<string, number>; deaths: Record<string, Record<string, number>>; attacks_on_humans: number;
+  humans_killed: number; births_capped: number; max_animals: number;
+  ledger: Record<string, number>; insects_note: string;
+}
+/** [id, species, x m, y m, action] */
+export type AnimalRow = [number, string, number, number, string];
+/** [id, name, x m, y m, action, age y] */
+export type HumanRow = [number, string, number, number, string, number];
+/** [id, kind, x m, y m, quality, done] */
+export type StructureRow = [number, string, number, number, number, boolean];
+export interface LifeData {
+  present: boolean; summary: LifeSummary | null; tile_size_m: number; tick?: number;
+  agents: { animals: AnimalRow[]; humans: HumanRow[]; structures: StructureRow[] } | null;
+}
+
 export const api = {
+  witness: () => json<WitnessState>("/api/witness"),
+  witnessIntroduce: () => post<{ messages: WitnessMessage[] }>("/api/witness/introduce"),
+  witnessMessages: (after = 0) => json<{ messages: WitnessMessage[] }>(`/api/witness/messages?after=${after}`),
+  witnessSay: (text: string) => post<{ messages: WitnessMessage[]; witness: WitnessState }>("/api/witness/message", { text }),
+  witnessAutonomy: (enabled: boolean) => post<{ messages: WitnessMessage[]; witness: WitnessState }>("/api/witness/autonomy", { enabled }),
+  witnessMemories: () => json<{ memories: WitnessMemory[] }>("/api/witness/memories?limit=300"),
+  commands: () => json<{ commands: DivineCommand[]; queued: DivineCommand[] }>("/api/commands?limit=300"),
+  life: () => json<LifeData>("/api/life"),
+  creature: (id: number) => json<Record<string, unknown>>(`/api/life/${id}`),
   status: () => json<Status>("/api/status"),
   stats: () => json<Stats>("/api/stats"),
   history: () => json<Stats[]>("/api/stats/history?limit=1500"),

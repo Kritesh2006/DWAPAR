@@ -2,12 +2,16 @@
 
 - **Source of truth:** https://github.com/Kritesh2006/dwapar, branch `main`. Every change is
   committed and pushed there. Never force-push, never rewrite published history.
-- **Phase gate:** Phase 1 is complete; **Phase 1.5 (The Age Before Life)** is authorised and in progress.
-  Do NOT begin Phase 2 or add organisms, inhabitants, agents, animals or population data without
-  explicit authorisation from the project owner.
-  `engine/dwapar/prana` and `engine/dwapar/buddhi` must stay empty (a test enforces this).
+- **Phase gate:** Phase 1.5 and **life + WITNESS** (owner authorisation 2026-11-21, D-035) are in
+  progress. The roadmap phases for animals, humanity, civilization and the autonomous universe are
+  being built under that authorisation.
+  - Every creature, structure or intervention must come from a validated, logged divine command
+    (CONSTITUTION Art. VI).
+  - Never hardcode technology trees (Art. IV).
+  - Lifeless worlds must stay bit-identical to laws 1.6.
 - **Laws versions:** any change that alters simulation outcomes must bump `LAWS_VERSION` in
-  `engine/dwapar/laws.py` (with a changelog line). Performance work must be proven bit-identical
+  `engine/dwapar/laws.py` (with a changelog line). Changes to animal or human behaviour bump
+  `LIFE_VERSION` in `engine/dwapar/prana/life.py` instead, since they alter only worlds that contain life. Performance work must be proven bit-identical
   instead (see `tests/test_performance.py`). Never mix results from different laws versions.
 - **Long experiments:** resume with `python -m dwapar experiment --budget-minutes N` (never restart
   them); record only real results in EXPERIMENTS.md (`python -m dwapar.report` prints the tables,

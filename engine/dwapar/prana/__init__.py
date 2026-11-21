@@ -1,6 +1,2 @@
-"""Prana — life, reproduction and biological evolution.
-
-RESERVED for a future phase. Intentionally empty: Phase 1 contains no living
-agents (vegetation is modelled as a continuous biomass field by Prakriti, not
-as organisms). Do not implement without explicit authorisation (CONSTITUTION.md).
-"""
+"""Prana — life: animals (individual creatures) and the Life container. Authorised by the owner
+(D-035); see dwapar.prana.life."""

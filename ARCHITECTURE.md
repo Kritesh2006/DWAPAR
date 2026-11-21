@@ -180,3 +180,44 @@ The renderer has its own animation loop and never writes to the engine.
 - A dashboard job: type-check, build, Vitest unit tests, and Playwright end-to-end tests that
   start a real engine and drive both the 2D map and the WebGL 3D world (including flying to
   ground level and back, with any shader compile error failing the test).
+
+## Life and WITNESS (engine 0.4)
+
+```
+Creator (chat, /api/commands) ──┐                       ┌── checkpoints (__life JSON, meta: queue, ledger)
+                                ├─► divine.submit ─► meta["command_queue"] ─► Simulation._step_once:
+WITNESS.daily / converse ───────┘      (validated)        1. apply due commands (logged in `commands`)
+                                                         2. Prakriti.step_hour (physics, laws 1.6)
+                                                         3. climate forcings
+                                                         4. Life.step_hour (animals, humans)
+                                                         5. at day start: day_hooks → WITNESS.daily
+```
+
+| Module | Role |
+|---|---|
+| `divine/commands.py` | Command catalogue, validation, application, conservation ledger (`meta["divine"]`), `schedule_replay`. |
+| `prana/species.py` | Species parameters. |
+| `prana/habitat.py` | What creatures can sense: drinkable water (including streams from runoff), water-distance map, continuous-coastline land test. |
+| `prana/animals.py` | Per-animal hourly behaviour. |
+| `prana/life.py` | Life container: spatial indexes per pool (predators, a species, humans), predation, births, deaths, shelters, teaching, ledger, JSON persistence, summary and agents for the API. |
+| `buddhi/mind.py` | Per-human mind: needs, perception, utility choice, memory, learned fear, skills, families. |
+| `witness/observe.py` | Factual observation, concerns (fire, drought, degradation, suffering humans, dwindling species), site selection from real fields. |
+| `witness/mind.py` | Identity and state persisted in the `witness` table; the daily cycle; goals and directives; dialogue. |
+| `smriti/store.py` | New tables: `commands`, `witness`, `witness_messages`, `witness_memories`. `truncate_after` forgets acts and lessons from a rewound future, but keeps conversations and instructions. |
+
+**API:**
+- `GET /api/witness`; `POST /api/witness/introduce | message | autonomy`;
+  `GET /api/witness/messages | memories | observe`;
+- `GET|POST /api/commands`;
+- `GET /api/life`, `GET /api/life/{id}`.
+
+**Dashboard:**
+- The **Witness** tab (`components/Witness.tsx`): Talk, Goals, Acts, Memory, Life.
+- `render3d/creatures.ts`: real-scale bodies near the camera, outlined markers from afar, shelters,
+  and WITNESS's presence above where it last looked or acted.
+- The rendering-only trees keep clear of simulated shelters.
+
+**Background execution:** WITNESS is attached by `Observatory`, so it runs inside both
+`dwapar serve` and the headless `dwapar run` (`start-headless.bat`). When no engine process runs,
+nothing acts, and the UI shows "engine paused, so not acting".
+

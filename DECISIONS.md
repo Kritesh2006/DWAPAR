@@ -199,3 +199,64 @@ triangle statistics. The geometry budget (about 0.2 M triangles at orbit, about 
 ground at medium) is within what integrated GPUs handle. Real-hardware frame rates are still to
 be measured (TASKS.md).
 
+### D-035 Life and WITNESS authorised; intervention only through logged commands
+On 2026-11-21 the owner asked for WITNESS, a persistent, autonomous steward-intelligence, together
+with animals, humans and civilisation. That is explicit authorisation to lift the Phase-2 gate.
+
+The constitution is amended (Art. I, new Art. VI). The founding rules are adapted rather than
+dropped:
+- nothing appears by itself;
+- every intervention is a validated, logged command;
+- worlds replay exactly from their command log;
+- conservation audits stay closed (water is moved from the ocean; rock, biomass and creatures are
+  counted);
+- natural collapse is still never prevented by the laws, only by recorded acts.
+
+### D-036 WITNESS is a deterministic reasoning system, not a language model
+The constitution forbids paid APIs and cloud dependencies (Art. V.1). The brief also rejects an
+expensive LLM per person.
+
+WITNESS's mind is local code, with persistent identity, memory and goals in SQLite. It runs an
+observe → remember → reason → plan → act → verify → learn cycle each simulated day:
+- **Reasoning:** utility over goals and directives.
+- **Site choice:** computed from real fields.
+- **Verification:** measured outcomes after a set number of days.
+- **Learning:** a running value per kind of act, plus lesson and mistake memories that change later
+  choices.
+- **Speech:** sentences built from observations and command results, so its statements about the
+  world are true when spoken.
+
+Limitation: its language understanding is pattern-based and narrow. It says so when it does not
+understand. A local LLM (for example via Ollama) could rephrase its speech later, without ever
+deciding acts.
+
+### D-037 Animals and humans are individual agents with JSON state inside checkpoints
+State is plain JSON, so floats round-trip exactly. It is stored in the checkpoint (`__life`) and
+included in the fingerprint only when life exists. Lifeless worlds are therefore bit-identical to
+laws 1.6: 99 pre-existing tests, golden fingerprints included, pass unchanged.
+
+Behaviour is per-individual utility choice from perception, needs, memory and learned values, with
+randomness from `rng.generator(seed, "life", tick)`. Habitat data is recomputed from current state
+each hour (the water map is cached by its inputs), so a mid-day restore continues exactly.
+
+Life is versioned separately (`LIFE_VERSION` 0.1) because it changes only worlds that contain life.
+
+### D-038 No technology tree: skills are continuous and learned
+Foraging, hunting, building and tool-making are numbers that grow by practice and by teaching. A
+shelter's quality comes from the builder's skill at that moment, and a learned threat makes shelter
+more valuable. Nothing unlocks anything (Art. IV).
+
+### D-039 Ecological simplifications chosen for honesty over drama
+- Drinking water: lakes, rivers, wetlands, pooled water, and streams. A tile's routed runoff counts
+  as a stream at ≥ 0.05 m³/s. Only 7 % of land qualified before streams were included, and all 12
+  humans in a test died of thirst.
+- Animals' drinking does not deplete water. It is negligible at tile scale.
+- Insects are colonies, one agent per colony.
+- Breeding is limited by local density and food.
+- There is a computational cap of 20,000 animals; every birth it prevents is counted and shown.
+
+### D-040 Creatures respect the rendered coastline
+A coastal 2 km tile is partly sea in the continuous surface the 3D view draws. Creatures may stand
+only where the surface interpolated between tile centres is at least 0.5 m above the sea.
+Otherwise a shelter appeared floating on the sea in the 3D view (screenshot review, session 6).
+

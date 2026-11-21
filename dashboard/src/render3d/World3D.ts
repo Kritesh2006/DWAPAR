@@ -13,7 +13,7 @@
 
 import * as THREE from "three";
 import { Sky } from "three/addons/objects/Sky.js";
-import type { Frame } from "../api";
+import type { Frame, LifeData } from "../api";
 import { HEATMAPS, type HeatStyle } from "../colormaps";
 import type { ViewMode } from "../render/Renderer";
 import { GLSL_HEIGHT, HeightField, fieldWarp } from "./heightfield";
@@ -22,11 +22,12 @@ import { Terrain, makeSharedUniforms } from "./terrain";
 import { Water } from "./water";
 import { Scatter, type ScatterEnv } from "./scatter";
 import { EYE_HEIGHT, FlightControls } from "./controls";
+import { Creatures } from "./creatures";
 
 export interface SunState { elevationDeg: number; azimuthDeg: number; isDay: boolean }
 export type Quality = "low" | "medium" | "high";
 export type Preset = "orbit" | "region" | "low" | "ground";
-export interface RenderStats { fps: number; frameMs: number; calls: number; triangles: number; chunks: number; trees: number; rocks: number; grass: number; altitude: number; quality: Quality }
+export interface RenderStats { fps: number; frameMs: number; calls: number; triangles: number; chunks: number; trees: number; rocks: number; grass: number; altitude: number; quality: Quality; creatures: number }
 
 /** Sun direction for a latitude, day of year and hour — the same geometry the engine uses. */
 export function sunVector(latDeg: number, dayOfYear: number, hour: number, daysPerYear: number): THREE.Vector3 {
@@ -77,6 +78,7 @@ export class World3D {
   private terrain = new Terrain(this.shared);
   private water = new Water(this.shared);
   private scatter = new Scatter();
+  private creatures = new Creatures();
   private clouds: THREE.Mesh;
   private fire: THREE.Points<THREE.BufferGeometry, THREE.PointsMaterial>;
   private field: HeightField | null = null;
@@ -119,7 +121,7 @@ export class World3D {
   onQualityChange: ((q: Quality) => void) | null = null;
   fps = 0;
   sunState: SunState = { elevationDeg: 0, azimuthDeg: 0, isDay: true };
-  stats: RenderStats = { fps: 0, frameMs: 0, calls: 0, triangles: 0, chunks: 0, trees: 0, rocks: 0, grass: 0, altitude: 0, quality: "medium" };
+  stats: RenderStats = { fps: 0, frameMs: 0, calls: 0, triangles: 0, chunks: 0, trees: 0, rocks: 0, grass: 0, altitude: 0, quality: "medium", creatures: 0 };
 
   constructor(private canvas: HTMLCanvasElement) {
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, preserveDrawingBuffer: true, powerPreference: "high-performance", logarithmicDepthBuffer: true });
@@ -143,7 +145,7 @@ export class World3D {
     this.envScene.add(this.envSky);
 
     this.scene.add(this.sky, this.sun, this.sun.target, this.hemi, this.moon);
-    this.scene.add(this.terrain.group, this.water.group, this.scatter.group);
+    this.scene.add(this.terrain.group, this.water.group, this.scatter.group, this.creatures.group, this.creatures.presence);
     this.scene.fog = new THREE.FogExp2(0xb4c6d8, 1e-5);
     this.sun.castShadow = true;
     this.moon.castShadow = false;
@@ -282,6 +284,32 @@ export class World3D {
   setGrid(on: boolean) { this.showGrid = on; this.shared.uGridLines.value = on ? 1 : 0; }
 
   setMode(m: ViewMode) { this.mode = m; if (this.frame) this.updateHeat(); }
+
+  /** Simulated creatures and shelters from /api/life. */
+  setLife(d: LifeData | null) {
+    this.creatures.setLife(d);
+    // simulated shelters stand in clearings: rendering-only trees must not grow through them
+    const ss = (d?.agents?.structures ?? []).map((s) => [s[2] - (this.w * this.tile) / 2, s[3] - (this.h * this.tile) / 2] as [number, number]);
+    if (ss.length !== this.shelters.length) { this.shelters = ss; this.scatter.invalidate(); }
+  }
+  private shelters: [number, number][] = [];
+
+  /** Where WITNESS last looked or acted (tile coordinates), or null. */
+  setPresence(tile: { x: number; y: number } | null) {
+    if (!tile || !this.w) { this.creatures.setPresence(null); return; }
+    this.creatures.setPresence(new THREE.Vector3((tile.x + 0.5 - this.w / 2) * this.tile, 0, (tile.y + 0.5 - this.h / 2) * this.tile));
+  }
+
+  /** Fly to a point given in engine metres from the map's top-left corner (e.g. a creature). */
+  flyToMetres(x: number, y: number) {
+    if (!this.w) return;
+    const tx = x - (this.w * this.tile) / 2, tz = y - (this.h * this.tile) / 2;
+    const F = new THREE.Vector3(tx, this.groundY(tx, tz), tz);
+    const fwd = new THREE.Vector3(-Math.sin(this.controls.yaw), 0, -Math.cos(this.controls.yaw));
+    const pos = F.clone().addScaledVector(fwd, -45); pos.y = this.groundY(pos.x, pos.z) + 14;
+    const d = F.clone().add(new THREE.Vector3(0, 1, 0)).sub(pos);
+    this.controls.flyTo(pos, Math.atan2(-d.x, -d.z), Math.atan2(d.y, Math.hypot(d.x, d.z)), 2.2);
+  }
 
   // ------------------------------------------------------------------ data
   setFrame(f: Frame) {
@@ -496,6 +524,10 @@ export class World3D {
       lake: (x, z) => (lake ? this.bil(lake, x, z, 0) / 255 : 0),
       desert: (x, z) => (desertMask ? this.bilW(desertMask, x, z, 0) : 0),
       burnt: (x, z) => this.bilW(L.fire, x, z, 0),
+      cleared: (x, z) => {
+        for (const s of this.shelters) if (Math.abs(s[0] - x) < 28 && Math.abs(s[1] - z) < 28) return true;
+        return false;
+      },
     };
   }
 
@@ -665,6 +697,8 @@ export class World3D {
       this.terrain.update(this.camera);
       this.scatter.update(this.scatterEnv(), this.camera.position, this.controls.agl, this.showTrees);
       this.shared.uCanopyNear.value = this.scatter.treesDrawn ? this.scatter.q.trees : -1;
+      this.creatures.update(this.camera, { x: -(this.w * this.tile) / 2, z: -(this.h * this.tile) / 2 },
+        (x, z) => this.groundY(x, z), this.controls.agl, this.shared.uTime.value);
       this.fire.visible = this.mode.kind === "living";
       (this.fire.material as THREE.PointsMaterial).opacity = 0.75 + 0.25 * Math.sin(this.shared.uTime.value * 11) * Math.sin(this.shared.uTime.value * 4.7);
     }
@@ -676,7 +710,7 @@ export class World3D {
     this.stats = {
       fps: this.fps, frameMs: Math.round(this.lastFrameMs * 10) / 10, calls: info.calls, triangles: info.triangles,
       chunks: this.terrain.visibleChunks, trees: this.scatter.counts.trees, rocks: this.scatter.counts.rocks, grass: this.scatter.counts.grass,
-      altitude: Math.round(this.controls.agl), quality: this.quality,
+      altitude: Math.round(this.controls.agl), quality: this.quality, creatures: this.creatures.counts.bodies,
     };
   }
 

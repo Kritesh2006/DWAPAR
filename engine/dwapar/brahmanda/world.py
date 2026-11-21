@@ -122,6 +122,9 @@ class World:
         self.terrain = np.asarray(terrain, dtype=np.uint8).copy()
         if self.terrain.shape != shape:
             raise InvalidStateError("terrain shape mismatch")
+        #: Animals, humans and structures (dwapar.prana.life.Life), or None for a lifeless world.
+        #: A lifeless world's state, checkpoints and fingerprint are exactly as before life existed.
+        self.life = None
 
     # Convenience attribute access: world.temperature etc.
     def __getattr__(self, name: str) -> np.ndarray:
@@ -169,7 +172,10 @@ class World:
         return sum(self.f[m] for m in ("iron_ore", "copper_ore", "coal"))
 
     def copy(self) -> "World":
-        return World(self.cfg, self.f, self.terrain, self.tick, dict(self.meta))
+        import copy as _copy
+        w = World(self.cfg, self.f, self.terrain, self.tick, _copy.deepcopy(self.meta))
+        w.life = self.life.copy() if self.life is not None else None
+        return w
 
     def validate(self) -> None:
         """Raise InvalidStateError if any invariant is broken."""
@@ -201,4 +207,6 @@ class World:
         h.update(self.terrain.tobytes())
         import json as _json
         h.update(_json.dumps(self.meta, sort_keys=True).encode())
+        if self.life is not None:
+            h.update(self.life.to_json().encode())
         return h.hexdigest()

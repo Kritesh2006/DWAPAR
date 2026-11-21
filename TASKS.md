@@ -53,7 +53,34 @@ Status legend: ✅ done and tested · 🟡 partial · ⬜ not started
 | 3D | Honesty: simulation grid, procedural detail off, permanent note | ✅ | Playwright toggles; screenshots |
 | 3D | Quality presets + auto-downgrade + stats | ✅ | code; **laptop-GPU frame rate not measured** (software GL only) |
 
-## Last verified (session 5)
+## Session 6 — WITNESS and life (engine 0.4, laws 1.6 unchanged, life model 0.1)
+
+| Area | Item | Status | Evidence |
+|---|---|---|---|
+| Governance | Owner authorisation recorded; constitution amended (Art. I, new Art. VI) | ✅ | CONSTITUTION.md, D-035 |
+| Divine | Validated, logged commands that change authoritative state | ✅ | `test_commands_change_persistent_state_and_are_logged`, `test_invalid_commands_are_refused_and_recorded` |
+| Divine | Conservation audits stay closed under intervention | ✅ | `test_divine_acts_keep_conservation_audits_closed` (water, rock < 1e-12) |
+| Divine | World replays exactly from the command log, no decision-maker | ✅ | `test_replaying_the_command_log_reproduces_the_world_exactly` |
+| Laws | Lifeless worlds unchanged (bit-identical to 1.6) | ✅ | all 99 pre-existing tests incl. golden fingerprints; `test_no_life_without_a_recorded_command` |
+| WITNESS | Awakens, introduces itself from real data, converses, acts, remembers across sessions | ✅ | `test_witness_awakens_talks_acts_and_remembers_across_sessions`; Playwright `WITNESS awakens…` |
+| WITNESS | Autonomous cycle: observe → remember → reason → plan → act → verify → learn | ✅ | `test_witness_autonomy_cycle_verifies_and_learns` |
+| WITNESS | Obeys "do not intervene"; autonomy switch; goals, acts and memories inspectable | ✅ | `test_witness_obeys_do_not_intervene`; UI tabs |
+| WITNESS | Open-ended natural language | ⬜ | pattern-based only (D-036) |
+| Animals | Needs, grazing, hunting, fleeing, territory, herds, breeding, heritable variation, learned wariness | ✅ v0.1 | `test_prey_flees…`, `test_grazing…`; ecology runs in JOURNAL |
+| Animals | Calibrated long-term coexistence | 🟡 | predators often exhaust prey within 1–2 years without restocking (JOURNAL) |
+| Humans | Individual minds; tiger encounter → flee, remember, warn, build shelter sooner | ✅ v0.1 | `test_human_meets_a_tiger…` (controlled vs no-tiger; passes on 4 seeds) |
+| Humans | Skills by practice and teaching; families; births; shelters | ✅ v0.1 | `test_humans_learn_skills…`; 100-day runs: 12 → 17 humans |
+| Civilization | Settlements, farming, tools as objects, cooperation beyond families | ⬜ | ROADMAP |
+| Background | Runs in server and headless runner; never claims to act when stopped | ✅ | Observatory attaches WITNESS; UI "engine paused, so not acting" |
+| Persistence | Life inside checkpoints; mid-day restore continues exactly | ✅ | `test_life_is_deterministic_and_survives_a_mid_day_checkpoint` |
+| 3D | Creatures, shelters, markers, WITNESS's presence; trees clear of shelters | ✅ | screenshots `docs/images/life-*.jpg`, `witness-*.jpg` |
+
+## Last verified (session 6)
+- Engine: `pytest` **113 passed** (99 existing + 14 new), local.
+- Dashboard: strict type-check and build clean; Vitest **22 passed**; Playwright **8 passed** (local, SwiftShader).
+- CI: recorded below after the push.
+
+## Previously verified (session 5)
 - Engine: `pytest` **99 passed** (local); no engine code changed.
 - Dashboard: strict type-check and build clean; Vitest **22 passed**; Playwright **7 passed** (local, SwiftShader).
 - 3D screenshots reviewed: orbit, region (11 km), low flight (380 m), ground (1.7 m), coast, mountain, grid, detail-off and heatmap.
@@ -78,5 +105,11 @@ Status legend: ✅ done and tested · 🟡 partial · ⬜ not started
   Field lookups are warped by under one tile. Both are rendering-only and documented (D-032).
 - 🟡 3D: moonlight at night is representational; *Daylight* is a labelled viewing aid.
 - 🟡 Atmosphere wraps periodically at map edges while land and water do not.
+- 🟡 Life ecology is uncalibrated over decades. Predators can exhaust prey within 1–2 years, and
+  WITNESS's restocking masks it. The two-year run without WITNESS lost its wolves.
+- 🟡 Life step cost: about 60 s per simulated year with ~1,600 creatures on 48² (single-threaded
+  Python). Capped at 20,000 animals (counted, shown).
+- 🟡 WITNESS language is pattern-based; unknown requests get an honest "I do not understand".
+- 🟡 Creatures are not drawn on the 2D map yet (3D and the Witness › Life tab only).
 - ⬜ `resources.extract("stone")` does not lower elevation yet.
 - ⬜ 1,000- and 10,000-year milestones.

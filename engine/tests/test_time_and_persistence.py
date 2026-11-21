@@ -150,10 +150,10 @@ def test_invalid_state_never_reached_in_long_run(small_cfg):
     sim.world.validate()
 
 
-def test_no_inhabitants_exist(sim):
-    """Phase 1 constitution: the world contains no agents of any kind."""
-    import dwapar.buddhi as buddhi
-    import dwapar.prana as prana
-    assert [n for n in dir(prana) if not n.startswith("_")] == []
-    assert [n for n in dir(buddhi) if not n.startswith("_")] == []
+def test_no_life_without_a_recorded_command(sim):
+    """Life was authorised by the owner (D-035), but no creature may appear by itself: a world has
+    life only after a logged create_* command, and a lifeless world carries no life state at all."""
+    sim.step(24 * 3)
+    assert sim.world.life is None
     assert not any(k in sim.world.f for k in ("population", "agents", "inhabitants", "animals"))
+    assert "command_queue" not in sim.world.meta and "divine" not in sim.world.meta

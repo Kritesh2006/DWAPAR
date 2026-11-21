@@ -145,8 +145,9 @@ col = mix(col, vec3(0.06, 0.06, 0.035) * (0.8 + 0.4 * n3) * (1.0 + grit * 0.5), 
 rough = mix(rough, 0.55, wWet * 0.6);
 
 // beaches: low, gentle ground next to the sea; wet sand at the waterline
-float wBeach = (1.0 - smoothstep(1.5, 7.0, hs + (n3 - 0.5) * 3.0)) * (1.0 - smoothstep(0.06, 0.22, slope)) * step(-40.0, hs);
-vec3 sand = mix(vec3(0.52, 0.45, 0.31), vec3(0.62, 0.55, 0.40), n3) * (1.0 + grit * 0.5);
+float wBeach = (1.0 - smoothstep(0.8, 3.5, hs + (n3 - 0.5) * 2.0)) * (1.0 - smoothstep(0.06, 0.22, slope)) * step(-40.0, hs)
+             * (1.0 - smoothstep(4.0, 12.0, vAbove));   // only where the simulated ground itself meets the sea
+vec3 sand = mix(vec3(0.42, 0.36, 0.25), vec3(0.52, 0.45, 0.32), n3) * (1.0 + grit * 0.5);
 sand = mix(vec3(0.27, 0.23, 0.155), sand, smoothstep(0.0, 1.6, hs));
 col = mix(col, sand, wBeach);
 rough = mix(rough, mix(0.45, 0.9, smoothstep(0.0, 1.6, hs)), wBeach);

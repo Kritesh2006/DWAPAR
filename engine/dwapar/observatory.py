@@ -33,6 +33,14 @@ class Observatory:
             log.info("generated new world %s (seed %s)", self.sim.world_id, self.sim.cfg.seed)
             self.recovered = False
         self.runner = Runner(lambda: self.sim, speed=speed, on_error=self._on_error)
+        self._attach_witness()
+
+    def _attach_witness(self) -> None:
+        """WITNESS lives with the world: its identity and memories are loaded from the database
+        and its daily cycle runs inside the engine's step (so it acts only while the engine runs)."""
+        from .witness import Witness
+        self.witness = Witness(self.sim)
+        self.sim.day_hooks = [self.witness.daily]
 
     def _on_error(self, msg: str) -> None:
         if self.sim.store is not None and self.sim.world_id is not None:
@@ -62,6 +70,7 @@ class Observatory:
             with self.sim.lock:
                 self.sim.checkpoint(label="manual")
                 self.sim = Simulation.create(cfg, self.store)
+                self._attach_witness()
             if was:
                 self.runner.resume()
             return self.sim
@@ -71,4 +80,5 @@ class Observatory:
             self.runner.pause()
             with self.sim.lock:
                 self.sim = Simulation.from_checkpoint(self.store, checkpoint_id=checkpoint_id)
+                self._attach_witness()
             return self.sim

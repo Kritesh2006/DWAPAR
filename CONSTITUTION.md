@@ -4,15 +4,20 @@ These rules bind every contributor, human or AI. Changing one requires an entry 
 DECISIONS.md and explicit approval from the project owner.
 
 ## Article I — Scope of the current phase
-1. **Phase 1.5 — The Age Before Life** is authorised by the project owner (2026-11-19). It covers
-   world stabilisation, better environmental laws, long-term experiments and visualisation.
-2. **No organisms, characters, intelligent agents, animals, civilizations or human inhabitants**
-   may be introduced. Vegetation stays a continuous biomass field, not organisms.
-3. `prana` (life) and `buddhi` (intelligence) stay empty until the owner explicitly authorises
-   Phase 2. A test enforces this.
-4. The dashboard must never show inhabitants or invented population statistics.
-5. Natural collapse (vegetation die-off, drying, flooding, erosion) must not be artificially
-   prevented. Only programming errors are fixed, and each fix must say which it was.
+1. **Phase 1.5 — The Age Before Life** was authorised by the project owner on 2026-11-19.
+   **Life and WITNESS** were authorised by the owner on 2026-11-21 (D-035). Animals, humans and
+   their minds (`prana`, `buddhi`), divine commands (`divine`) and WITNESS (`witness`) may now exist.
+2. No creature, structure or intervention may appear by itself. Every one comes from a validated
+   divine command (Art. VI), issued by the Creator or by WITNESS and recorded in the world's log. A
+   world with no commands has no life (a test enforces this).
+3. Vegetation remains a continuous biomass field. Individual trees in the 3D view are rendering
+   only (D-032).
+4. The dashboard shows population figures only as read from the engine. It never invents or
+   extrapolates them.
+5. *Amended 2026-11-21 (D-035).* The laws themselves must never prevent natural collapse:
+   die-off, drying, flooding, erosion and extinction happen as physics and ecology dictate.
+   Interventions are allowed only as recorded divine commands. Programming errors are still the only
+   thing fixed in code, and each fix must say which it was.
 
 ## Article II — Scientific integrity
 1. Never fabricate scientific or experimental results.
@@ -46,3 +51,17 @@ DECISIONS.md and explicit approval from the project owner.
 2. The simulation engine is independent of visualisation. The world must run headless.
 3. Small, meaningful commits. Never force-push. Never commit credentials.
 4. Keep the project documents current at the end of every session.
+
+## Article VI — Intervention (added 2026-11-21, D-035)
+1. A divine command is validated before it is queued, applied at the start of a tick before
+   physics, and logged with its tick, issuer, parameters, reason and measured result.
+2. A world must be reproducible from any checkpoint plus its command log alone. No decision-maker
+   or language model may be needed to replay it.
+3. Interventions respect the conservation audits.
+   - Water is moved from the ocean, never created.
+   - Rock added or removed is counted.
+   - Seeded biomass and created creatures are counted.
+4. WITNESS acts only through divine commands. It may never write to world state directly, and it
+   must never claim to be acting while no engine process is running.
+5. The Creator can disable WITNESS's autonomy, forbid intervention, and review every act.
+

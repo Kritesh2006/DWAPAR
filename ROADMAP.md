@@ -1,7 +1,6 @@
 # Roadmap
 
-Phases are plans, not promises. **No phase introducing life starts without explicit authorisation
-from the project owner.**
+Phases are plans, not promises. Life and WITNESS were authorised by the owner on 2026-11-21 (D-035).
 
 ## Phase 1 — The Creation of a World ✅
 Seeded terrain, climate, water, vegetation, fire, erosion, resources, time, persistence, dashboard.
@@ -52,14 +51,32 @@ Remaining:
   - Coastal cliffs.
   - A web worker for tree placement.
 
-## Phase 2 — Prana (life) — requires authorisation
-Organisms with metabolism drawing on the world's real energy and resources; reproduction with
-heritable variation; selection by environment. No predetermined species or outcomes.
+## WITNESS and life (authorised 2026-11-21) — the owner's six phases
 
-## Phase 3 — Buddhi (intelligence) — requires authorisation
-Learning agents embodied in the world, acting only through physical interfaces (`resources.extract`
-and successors). No hardcoded technology trees.
+| Phase | Status | What exists | What does not yet |
+|---|---|---|---|
+| 1 The Awakening | ✅ implemented, v0.1 | Persistent identity and memory; introduction from real observations; conversation; instructions remembered across sessions; real acts of creation; the WITNESS interface | Open-ended language: understanding is pattern-based |
+| 2 Divine powers | ✅ mostly | Reshape land, carve channels, create lakes (ocean water), bring rain (ocean water), plant and restore vegetation, put out fire, regional warming/cooling. All logged, audited and replayable | Wind control; river creation is indirect (carve a channel, physics routes the water) |
+| 3 Animals | ✅ v0.1 | Six species; needs; grazing; hunting with realistic failure rates; fleeing; territory; herds; density-limited breeding; heritable variation; learned wariness; death causes | Calibrated population dynamics over decades; more species; fish and birds; disease |
+| 4 Humanity | ✅ v0.1 | Individual minds: needs, fear, places and episodes, learned species fear, alarms, teaching, skills by practice, families and children, shelters from local wood, the tiger behaviour | Durable tools as objects; farming; clothing; fire use; language |
+| 5 Civilization | 🟡 begun | Knowledge transfer (skills, places, dangers); family homes; shelter improvement by skill | Settlements, cooperation beyond families, farming, trade, institutions — emergent only, no tech tree |
+| 6 Autonomous universe | 🟡 partial | Autonomy runs in the engine loop of both the server and the headless runner (`start-headless.bat`); the daily verify-and-learn cycle | A Windows service or scheduled task; scaling beyond 20,000 animals (vectorised or compiled minds); multi-decade civilisation runs |
 
-## Phase 4+ — Civilization
+### Next
+1. **Calibrate the ecology** with multi-year runs per seed: predator–prey coexistence without
+   WITNESS restocking, and human population stability.
+2. **Phase 5 seeds:**
+   - plant gathering that leaves seeds, so farming can be discovered, not unlocked;
+   - fire use;
+   - cooperation in building;
+   - a settlement measure (clusters of shelters).
+3. **WITNESS:**
+   - longer-horizon plans;
+   - explaining any act on request ("why");
+   - an optional local language model for phrasing only, never for deciding.
+4. **Performance:** vectorised animal steps; a time-sliced life step for large populations.
+5. Show creatures on the 2D map.
+
+## Later — Civilization research
 Observation tooling for emergent communication, cooperation, economies and science, measured against
 human knowledge without leaking it in.

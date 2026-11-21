@@ -58,6 +58,45 @@ CREATE TABLE IF NOT EXISTS events (
     message TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_events_world ON events(world_id, tick);
+CREATE TABLE IF NOT EXISTS commands (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    world_id INTEGER NOT NULL REFERENCES worlds(id),
+    seq INTEGER,
+    tick INTEGER NOT NULL,
+    issuer TEXT NOT NULL,
+    kind TEXT NOT NULL,
+    params TEXT NOT NULL,
+    reason TEXT NOT NULL DEFAULT '',
+    status TEXT NOT NULL,
+    result TEXT NOT NULL,
+    created_at REAL NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_cmd_world ON commands(world_id, tick);
+CREATE TABLE IF NOT EXISTS witness (
+    world_id INTEGER PRIMARY KEY REFERENCES worlds(id),
+    state TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS witness_messages (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    world_id INTEGER NOT NULL REFERENCES worlds(id),
+    tick INTEGER NOT NULL,
+    speaker TEXT NOT NULL,
+    text TEXT NOT NULL,
+    data TEXT NOT NULL DEFAULT '{}',
+    created_at REAL NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_wmsg_world ON witness_messages(world_id, id);
+CREATE TABLE IF NOT EXISTS witness_memories (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    world_id INTEGER NOT NULL REFERENCES worlds(id),
+    tick INTEGER NOT NULL,
+    kind TEXT NOT NULL,
+    text TEXT NOT NULL,
+    data TEXT NOT NULL DEFAULT '{}',
+    importance REAL NOT NULL DEFAULT 0.5,
+    created_at REAL NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_wmem_world ON witness_memories(world_id, id);
 CREATE TABLE IF NOT EXISTS stats (
     world_id INTEGER NOT NULL REFERENCES worlds(id),
     tick INTEGER NOT NULL,
@@ -77,6 +116,8 @@ def _serialise(world: World) -> bytes:
     arrays["terrain"] = world.terrain
     arrays["__tick"] = np.array([world.tick], dtype=np.int64)
     arrays["__meta"] = np.frombuffer(json.dumps(world.meta, sort_keys=True).encode(), dtype=np.uint8)
+    if world.life is not None:
+        arrays["__life"] = np.frombuffer(world.life.to_json().encode(), dtype=np.uint8)
     np.savez_compressed(buf, **arrays)
     return buf.getvalue()
 
@@ -110,7 +151,11 @@ def _deserialise(blob: bytes, cfg: WorldConfig) -> World:
         terrain = z["terrain"]
         tick = int(z["__tick"][0])
         meta = json.loads(bytes(z["__meta"]).decode()) if "__meta" in z.files else {}
+        life_json = bytes(z["__life"]).decode() if "__life" in z.files else None
     world = World(cfg, fields, terrain, tick, meta)
+    if life_json is not None:
+        from ..prana.life import Life
+        world.life = Life.from_json(life_json)
     world.validate()
     return world
 
@@ -219,7 +264,74 @@ class Store:
             self.conn.execute("BEGIN IMMEDIATE")
             self.conn.execute("DELETE FROM events WHERE world_id=? AND tick>?", (world_id, tick))
             self.conn.execute("DELETE FROM stats WHERE world_id=? AND tick>?", (world_id, tick))
+            # acts after the checkpoint never happened; WITNESS keeps its conversations and the
+            # Creator's instructions, but forgets acts, discoveries and lessons from that lost future
+            self.conn.execute("DELETE FROM commands WHERE world_id=? AND tick>?", (world_id, tick))
+            self.conn.execute("DELETE FROM witness_memories WHERE world_id=? AND tick>? AND kind NOT IN "
+                              "('instruction', 'conversation')", (world_id, tick))
             self.conn.execute("COMMIT")
+
+    # ------------------------------------------------------ divine commands
+    def add_command(self, world_id: int, cmd: dict, status: str, result: dict) -> None:
+        self._tx("INSERT INTO commands(world_id, seq, tick, issuer, kind, params, reason, status, result, created_at) "
+                 "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                 (world_id, cmd.get("seq"), cmd["tick"], cmd["issuer"], cmd["kind"], json.dumps(cmd["params"]),
+                  cmd.get("reason", ""), status, json.dumps(result), time.time()))
+
+    def commands(self, world_id: int, since_tick: int = -1, limit: int = 500, status: Optional[str] = None) -> list[dict]:
+        q = "SELECT seq, tick, issuer, kind, params, reason, status, result FROM commands WHERE world_id=? AND tick>?"
+        args: list = [world_id, since_tick]
+        if status:
+            q += " AND status=?"
+            args.append(status)
+        q += " ORDER BY id DESC LIMIT ?"
+        args.append(limit)
+        with self._lock:
+            rows = self.conn.execute(q, args).fetchall()
+        out = [dict(zip(("seq", "tick", "issuer", "kind", "params", "reason", "status", "result"), r)) for r in rows]
+        for c in out:
+            c["params"], c["result"] = json.loads(c["params"]), json.loads(c["result"])
+        return out[::-1]
+
+    # ------------------------------------------------------ WITNESS
+    def witness_state(self, world_id: int) -> Optional[dict]:
+        with self._lock:
+            row = self.conn.execute("SELECT state FROM witness WHERE world_id=?", (world_id,)).fetchone()
+        return json.loads(row[0]) if row else None
+
+    def save_witness_state(self, world_id: int, state: dict) -> None:
+        self._tx("INSERT OR REPLACE INTO witness(world_id, state) VALUES (?, ?)", (world_id, json.dumps(state)))
+
+    def add_witness_message(self, world_id: int, tick: int, speaker: str, text: str, data: Optional[dict] = None) -> int:
+        cur = self._tx("INSERT INTO witness_messages(world_id, tick, speaker, text, data, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+                       (world_id, tick, speaker, text, json.dumps(data or {}), time.time()))
+        return int(cur.lastrowid)
+
+    def witness_messages(self, world_id: int, limit: int = 200, after_id: int = 0) -> list[dict]:
+        with self._lock:
+            rows = self.conn.execute(
+                "SELECT id, tick, speaker, text, data, created_at FROM witness_messages WHERE world_id=? AND id>? "
+                "ORDER BY id DESC LIMIT ?", (world_id, after_id, limit)).fetchall()
+        return [{"id": r[0], "tick": r[1], "speaker": r[2], "text": r[3], "data": json.loads(r[4]), "time": r[5]}
+                for r in rows][::-1]
+
+    def add_witness_memory(self, world_id: int, tick: int, kind: str, text: str, data: Optional[dict] = None,
+                           importance: float = 0.5) -> None:
+        self._tx("INSERT INTO witness_memories(world_id, tick, kind, text, data, importance, created_at) "
+                 "VALUES (?, ?, ?, ?, ?, ?, ?)", (world_id, tick, kind, text, json.dumps(data or {}), importance, time.time()))
+
+    def witness_memories(self, world_id: int, limit: int = 200, kinds: Optional[list[str]] = None) -> list[dict]:
+        q = "SELECT id, tick, kind, text, data, importance FROM witness_memories WHERE world_id=?"
+        args: list = [world_id]
+        if kinds:
+            q += f" AND kind IN ({','.join('?' * len(kinds))})"
+            args += kinds
+        q += " ORDER BY id DESC LIMIT ?"
+        args.append(limit)
+        with self._lock:
+            rows = self.conn.execute(q, args).fetchall()
+        return [{"id": r[0], "tick": r[1], "kind": r[2], "text": r[3], "data": json.loads(r[4]), "importance": r[5]}
+                for r in rows][::-1]
 
     # ------------------------------------------------------ events/stats
     def add_events(self, world_id: int, events: list[dict]) -> None:

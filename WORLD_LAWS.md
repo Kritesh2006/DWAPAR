@@ -190,3 +190,78 @@ inside the ice, and icebergs melt instantly.
 
 `resources.extract()` remains the only removal path for future inhabitants. It does not yet lower
 elevation when stone is quarried, a known limitation for Phase 2+.
+
+## Divine commands (engine 0.4, D-035)
+Commands are the only non-physical changes. Each is validated, queued in `meta["command_queue"]`,
+applied at the start of a tick before physics, and logged in the `commands` table. Any world
+replays exactly from a checkpoint plus its log (`divine.schedule_replay`).
+
+| Command | Effect on state | Audit |
+|---|---|---|
+| `shape_land` | elevation ± height × Gaussian kernel (radius in tiles) | rock counted in `meta.divine.rock_t`; terrain reclassified |
+| `carve_channel` | lowers a line of tiles so routing can carry water along it | rock counted |
+| `create_lake` | hollows a basin and fills it with water drawn evenly from ocean tiles | rock counted; water conserved |
+| `bring_rain` | moves ocean water into the atmosphere over a region; physics rains it out | water conserved |
+| `plant_forest` | adds biomass on land (not ice, not lava) | biomass counted |
+| `restore_ecosystem` | biomass up to a floor, soil organic matter, soil water from the ocean, fires out | biomass, organic matter counted; water conserved |
+| `extinguish_fire` | fire → 0 in the region | — |
+| `climate_forcing` | each hour adds the relaxation step toward (equilibrium + Δ) for N days | regional climate anomaly ≈ Δ |
+| `create_animals` / `create_humans` | individuals placed on land near the point | creatures counted |
+
+Winds are not yet commandable.
+
+## Life (life model 0.1, D-037 to D-040)
+*Simplifications are stated plainly. Parameters are rough real-world magnitudes, not fitted.*
+
+### Animals
+| Species | Diet | Body mass |
+|---|---|---|
+| insect colony | plants | 0.5 kg (one agent stands for a colony) |
+| rabbit | plants | 2 kg |
+| deer | plants | 80 kg |
+| bison | plants | 600 kg |
+| wolf | meat | 40 kg |
+| tiger | meat | 200 kg |
+
+- **Each hour:** sense, update needs (energy, hydration, fatigue, wariness), then choose:
+  flee > drink > eat/hunt > rest > mate > roam.
+- **Grazing** removes biomass from the tile (`ledger.plants_eaten_kg`).
+- **Carcasses** add organic matter (`ledger.bodies_to_soil_kg`).
+- **Hunting:** success is mostly below 20 %; herds are vigilant; predators track prey up to 15 km.
+- **Feeding:** carnivores feast and fast; a big cat eats a large kill about weekly.
+- **Humans as prey:** a predator attacks people only when starving and no other prey is near.
+- **Breeding** stops above a species' density per km² (scaled by local food).
+- **Heritable variation:** speed and size genes (±3 % per generation).
+- **Learned wariness** rises after escapes and is partly passed to young.
+- **Death:** starvation, thirst, cold, old age, predation.
+
+### Humans
+- **Body and state:** needs, emotions (fear, loneliness), health and age.
+- **Memory:**
+  - places: water, food, and danger with species;
+  - up to 40 episodes;
+  - learned fear per species, starting from a mild innate wariness of large carnivores.
+- **Choice:** utility over flee, drink, eat (forage or hunt), sleep, build, seek people, teach and
+  explore. Thirst and starvation override plans.
+- **Finding water:** sight (about 10 km), then memory, then asking people nearby, then low ground,
+  then a widening search.
+- **Moving:** around coastlines and lakes.
+- **Sharing:** alarms and teaching transfer fears, places and skills.
+- **Families:** partners share one home; births follow intervals and nutrition.
+- **Shelters:**
+  - built from wood cut from the tile (`ledger.wood_cut_kg`), 30 labour hours;
+  - quality comes from building skill (+0.1 with stone) and is improved later when the remembered
+    threat demands it;
+  - protect sleepers from predators in proportion to quality.
+- **Not yet simulated:** farming, durable tools as objects, language, trade, settlements beyond
+  families.
+
+### Drinking water
+A creature can drink on a tile that is a lake, river or wetland, has more than 20 mm standing water,
+or carries a stream: runoff at least `STREAM_M3S` = 0.05 m³/s, which is about 0.045 mm/h of
+`flow_flux` on a 2 km tile.
+
+### Limits
+- At most 20,000 animals: a computational limit, not an ecological one. Prevented births are counted.
+- Creatures stand only where the surface interpolated between tile centres is 0.5 m above the sea.
+

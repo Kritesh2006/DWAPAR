@@ -115,6 +115,20 @@ class LoadBody(BaseModel):
     checkpoint_id: int
 
 
+class WitnessMessageBody(BaseModel):
+    text: str = Field(min_length=1, max_length=2000)
+
+
+class AutonomyBody(BaseModel):
+    enabled: bool
+
+
+class CommandBody(BaseModel):
+    kind: str
+    params: dict
+    reason: Optional[str] = None
+
+
 class LoadWorldBody(BaseModel):
     world_id: int
 
@@ -341,6 +355,94 @@ def create_app(db_path: str | Path = "data/dwapar.sqlite", default_cfg: Optional
             raise HTTPException(422, str(exc))
         obs().new_world(cfg)
         return status()
+
+    # ------------------------------------------------------- WITNESS, divine acts, life
+    @app.get("/api/witness")
+    def witness_state():
+        o = obs()
+        return o.witness.summary(running=o.runner.running)
+
+    @app.post("/api/witness/introduce")
+    def witness_introduce():
+        o = obs()
+        msg = o.witness.introduce()
+        return {"messages": [msg] if msg else []}
+
+    @app.get("/api/witness/messages")
+    def witness_messages(after: int = 0, limit: int = 200):
+        o = obs()
+        return {"messages": o.store.witness_messages(o.sim.world_id, limit=min(limit, 1000), after_id=after)}
+
+    @app.post("/api/witness/message")
+    def witness_message(body: WitnessMessageBody):
+        o = obs()
+        replies = o.witness.converse(body.text)
+        return {"messages": replies, "witness": o.witness.summary(running=o.runner.running)}
+
+    @app.post("/api/witness/autonomy")
+    def witness_autonomy(body: AutonomyBody):
+        o = obs()
+        msg = o.witness.set_autonomy(body.enabled)
+        return {"messages": [msg], "witness": o.witness.summary(running=o.runner.running)}
+
+    @app.get("/api/witness/memories")
+    def witness_memories(kind: Optional[str] = None, limit: int = 200):
+        o = obs()
+        return {"memories": o.store.witness_memories(o.sim.world_id, min(limit, 2000), kind.split(",") if kind else None)}
+
+    @app.get("/api/witness/observe")
+    def witness_observe():
+        from .. import witness as _w  # noqa: F401
+        from ..witness.observe import observe as _observe
+        sim = obs().sim
+        with sim.lock:
+            o = _observe(sim)
+        o.pop("coarse_biomass", None)
+        return o
+
+    @app.get("/api/commands")
+    def get_commands(limit: int = 200, status: Optional[str] = None):
+        o = obs()
+        from ..divine import COMMAND_KINDS
+        from ..divine import describe as _describe
+        cmds = o.store.commands(o.sim.world_id, limit=min(limit, 5000), status=status)
+        for c in cmds:
+            try:
+                c["text"] = _describe(c, c["result"] if c["status"] == "applied" else None, o.sim.cfg.tile_size_m)
+            except (KeyError, TypeError, ValueError):
+                c["text"] = c["kind"].replace("_", " ")
+        return {"commands": cmds,
+                "queued": o.sim.world.meta.get("command_queue", []),
+                "kinds": {k: {"summary": v[0], "params": {n: [s[0].__name__, s[1], s[2], s[3]] for n, s in v[1].items()}}
+                          for k, v in COMMAND_KINDS.items()}}
+
+    @app.post("/api/commands")
+    def post_command(body: CommandBody):
+        from ..divine import CommandError
+        try:
+            cmd = obs().sim.submit_command(body.kind, body.params, "creator", body.reason or "")
+        except CommandError as exc:
+            raise HTTPException(422, str(exc))
+        return {"queued": cmd}
+
+    @app.get("/api/life")
+    def get_life(agents: bool = True):
+        sim = obs().sim
+        with sim.lock:
+            life = sim.world.life
+            if life is None:
+                return {"present": False, "summary": None, "agents": None, "tile_size_m": sim.cfg.tile_size_m}
+            return {"present": True, "summary": life.summary(), "agents": life.agents() if agents else None,
+                    "tile_size_m": sim.cfg.tile_size_m, "tick": sim.world.tick}
+
+    @app.get("/api/life/{agent_id}")
+    def get_agent(agent_id: int):
+        sim = obs().sim
+        with sim.lock:
+            d = sim.world.life.describe_agent(agent_id) if sim.world.life is not None else None
+        if d is None:
+            raise HTTPException(404, "no such creature or structure")
+        return d
 
     # ------------------------------------------------------- realtime
     @app.websocket("/ws")

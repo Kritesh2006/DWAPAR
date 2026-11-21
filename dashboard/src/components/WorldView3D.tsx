@@ -1,10 +1,11 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
-import type { Frame } from "../api";
+import type { Frame, LifeData } from "../api";
 import { World3D, type Preset, type Quality, type RenderStats, type SunState } from "../render3d/World3D";
 import type { ViewMode } from "../render/Renderer";
 
 export interface View3DHandle {
   flyTo: (x: number, y: number) => void;
+  flyToMetres: (x: number, y: number) => void;
   overview: () => void;
   screenshot: () => Promise<Blob | null>;
   fps: () => number;
@@ -17,6 +18,8 @@ interface Props {
   simHoursPerSecond: number;
   windMean: number;
   onSelect: (x: number, y: number) => void;
+  life: LifeData | null;
+  presence: { x: number; y: number } | null;
 }
 
 const stored = <T extends string>(k: string, ok: readonly T[], def: T): T => {
@@ -30,7 +33,7 @@ const PRESETS: [Preset, string, string][] = [
   ["ground", "Ground", "Stand on the surface at eye height (1.7 m)"],
 ];
 
-const WorldView3D = forwardRef<View3DHandle, Props>(function WorldView3D({ frame, mode, seed, simHoursPerSecond, windMean, onSelect }, ref) {
+const WorldView3D = forwardRef<View3DHandle, Props>(function WorldView3D({ frame, mode, seed, simHoursPerSecond, windMean, onSelect, life, presence }, ref) {
   const wrap = useRef<HTMLDivElement>(null);
   const canvas = useRef<HTMLCanvasElement>(null);
   const world = useRef<World3D | null>(null);
@@ -65,6 +68,8 @@ const WorldView3D = forwardRef<View3DHandle, Props>(function WorldView3D({ frame
   useEffect(() => { world.current?.setSeed(seed); }, [seed]);
   useEffect(() => { if (frame) world.current?.setFrame(frame); }, [frame]);
   useEffect(() => { world.current?.setMode(mode); }, [mode]);
+  useEffect(() => { world.current?.setLife(life); }, [life]);
+  useEffect(() => { world.current?.setPresence(presence); }, [presence, frame?.width]);
   useEffect(() => { if (world.current) world.current.simHoursPerSecond = simHoursPerSecond; }, [simHoursPerSecond]);
   useEffect(() => { if (world.current) world.current.windMean = windMean; }, [windMean]);
   useEffect(() => { world.current?.setExaggeration(exag); }, [exag]);
@@ -81,6 +86,7 @@ const WorldView3D = forwardRef<View3DHandle, Props>(function WorldView3D({ frame
 
   useImperativeHandle(ref, () => ({
     flyTo: (x, y) => world.current?.flyTo(x, y),
+    flyToMetres: (x, y) => world.current?.flyToMetres(x, y),
     overview: () => world.current?.overview(),
     screenshot: () => world.current ? world.current.screenshot() : Promise.resolve(null),
     fps: () => world.current?.fps ?? 0,
@@ -125,14 +131,14 @@ const WorldView3D = forwardRef<View3DHandle, Props>(function WorldView3D({ frame
           <label title="Viewing aid: light the world as at mid-morning instead of the simulated hour"><input type="checkbox" checked={daylight} onChange={(e) => setDaylight(e.target.checked)} />Daylight</label>
         </div>
         <div className="row note">
-          <span className="honesty">Simulated at 2 km per tile. Finer relief, river meanders, trees, rocks and grass are deterministic rendering, not simulated objects.</span>
+          <span className="honesty">Simulated at 2 km per tile. Finer relief, river meanders, trees, rocks and grass are deterministic rendering, not simulated objects. Animals, humans and shelters are simulated; coloured dots mark them from afar. The golden form is where WITNESS last looked.</span>
         </div>
         <div className="row">
           {sun && <span className="dim mono">sun {sun.elevationDeg.toFixed(0)}° {sun.isDay ? "☀" : "☾"}{daylight ? " (viewing aid)" : ""}</span>}
           <button className="link" onClick={() => setShowStats((s) => !s)}>{showStats ? "hide stats" : "stats"}</button>
         </div>
         {showStats && stats && <div className="row mono dim stats3d">
-          {stats.fps} fps · {stats.frameMs} ms cpu · {stats.calls} draws · {(stats.triangles / 1e6).toFixed(2)} M tris · {stats.chunks} chunks · {stats.trees} trees · {stats.rocks} rocks · {stats.grass} grass
+          {stats.fps} fps · {stats.frameMs} ms cpu · {stats.calls} draws · {(stats.triangles / 1e6).toFixed(2)} M tris · {stats.chunks} chunks · {stats.trees} trees · {stats.rocks} rocks · {stats.grass} grass · {stats.creatures} creatures drawn
         </div>}
         <span className="dim help">drag orbit (look when near ground) · right-drag pan · wheel fly to cursor · WASD move · R/F up/down · Q/E turn · Shift fast · click inspect</span>
       </div>

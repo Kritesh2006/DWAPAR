@@ -23,6 +23,8 @@ export interface ScatterEnv {
   lake(x: number, z: number): number;
   desert(x: number, z: number): number;
   burnt(x: number, z: number): number;
+  /** true where people have cleared the ground (around simulated shelters) */
+  cleared(x: number, z: number): boolean;
 }
 
 export interface ScatterQuality { trees: number; rocks: number; grass: number }
@@ -305,7 +307,7 @@ const treeLayer: Layer = {
       const dens = canopyFrac(veg, x, z, env.seed) * smooth(-8, -3, env.temp(x, z)) + 0.03 * smooth(0.06, 0.2, veg);
       if (hash3(cx, cz, s + 99) > dens) continue;
       const temp = env.temp(x, z);
-      if (temp < -7 || env.desert(x, z) > 0.5 || env.cover(x, z) > 0.55 || env.lake(x, z) > 0.25) continue;
+      if (temp < -7 || env.desert(x, z) > 0.5 || env.cover(x, z) > 0.55 || env.lake(x, z) > 0.25 || env.cleared(x, z)) continue;
       const [ch] = env.field.river(x, z);
       if (ch > 0.15) continue;
       const h = env.field.height(x, z, LEAF_MINWL);

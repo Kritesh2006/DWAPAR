@@ -1,5 +1,5 @@
 import { Suspense, lazy, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { api, wsUrl, type Frame, type Stats, type Status, type WorldEvent } from "./api";
+import { api, wsUrl, type Frame, type LifeData, type Stats, type Status, type WorldEvent } from "./api";
 import { HEATMAPS, RESOURCE_NAMES, cssGradient, resourceStyle } from "./colormaps";
 import HistoryChart from "./components/HistoryChart";
 import MapStage, { type MapHandle } from "./components/MapStage";
@@ -9,6 +9,7 @@ import type { View3DHandle } from "./components/WorldView3D";
 const WorldView3D = lazy(() => import("./components/WorldView3D"));
 import { Archive, DisasterPanel, Inspector, PlanetPanel } from "./components/Panels";
 import WorldTimeline from "./components/WorldTimeline";
+import { WitnessPanel } from "./components/Witness";
 import type { Overlays, ViewMode } from "./render/Renderer";
 
 const LIVING_LAYERS = ["terrain", "vegetation", "moisture", "snow", "water", "flow", "flow_dir", "clouds", "rain",
@@ -29,7 +30,25 @@ export default function App() {
   const [events, setEvents] = useState<WorldEvent[]>([]);
   const [errors, setErrors] = useState<Record<string, number> | null>(null);
   const [selected, setSelected] = useState<{ x: number; y: number } | null>(null);
-  const [tab, setTab] = useState<"planet" | "inspect" | "disasters">("planet");
+  const [tab, setTab] = useState<"witness" | "planet" | "inspect" | "disasters">("planet");
+  const [life, setLife] = useState<LifeData | null>(null);
+  const [presence, setPresence] = useState<{ x: number; y: number } | null>(null);
+
+  // simulated life and WITNESS's attention (where it last looked), polled from the engine
+  useEffect(() => {
+    let alive = true;
+    const pull = async () => {
+      try {
+        const [l, w] = await Promise.all([api.life(), api.witness()]);
+        if (!alive) return;
+        setLife(l.present ? l : null);
+        setPresence(w.attention ? { x: w.attention.x, y: w.attention.y } : null);
+      } catch { /* engine restarting */ }
+    };
+    pull();
+    const t = setInterval(pull, 2000);
+    return () => { alive = false; clearInterval(t); };
+  }, [status?.world_id]);
   const [drawer, setDrawer] = useState(true);
   const [archive, setArchive] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -162,7 +181,7 @@ export default function App() {
           insets={{ left: 206, right: 352, top: barBottom, bottom: drawer ? 236 : 54 }} onSelect={(x, y) => { setSelected({ x, y }); setTab("inspect"); }} />
       ) : (
         <Suspense fallback={<div className="stage-empty">Loading the 3D world…</div>}>
-          <WorldView3D ref={view3d} frame={frame} mode={mode} seed={status?.seed ?? 1} simHoursPerSecond={simHps}
+          <WorldView3D ref={view3d} frame={frame} mode={mode} seed={status?.seed ?? 1} life={life} presence={presence} simHoursPerSecond={simHps}
             windMean={windRows.length ? windRows.reduce((a, b) => a + b, 0) / windRows.length : 0}
             onSelect={(x, y) => { setSelected({ x, y }); setTab("inspect"); }} />
         </Suspense>
@@ -195,6 +214,7 @@ export default function App() {
             <button className={dim === "3d" ? "on" : ""} onClick={() => setDim("3d")} title="Explore the world in 3D">3D world</button>
           </div>
           <button onClick={shoot} title="Export a PNG of the current view">⤓ Capture</button>
+          <button className={`witness-btn ${tab === "witness" ? "on" : ""}`} onClick={() => setTab("witness")} title="Speak with WITNESS, the world's steward">✦ WITNESS</button>
           <button onClick={() => setArchive(true)}>Archive</button>
           <span className={`link-state ${linked ? "" : "down"}`}><i className={`dot ${linked ? "live" : "down"}`} />{linked ? "telemetry" : "reconnecting"}</span>
         </div>
@@ -241,11 +261,12 @@ export default function App() {
 
       <aside className="dock right glass">
         <div className="tabs">
-          {([["planet", "Planet"], ["inspect", "Inspector"], ["disasters", "Disasters"]] as const).map(([k, l]) => (
+          {([["witness", "Witness"], ["planet", "Planet"], ["inspect", "Inspector"], ["disasters", "Disasters"]] as const).map(([k, l]) => (
             <button key={k} className={tab === k ? "on" : ""} onClick={() => setTab(k)}>{l}</button>
           ))}
         </div>
         <div className="tab-body">
+          {tab === "witness" && <WitnessPanel status={status} life={life} onLocate={(x, y) => { setDim("3d"); setTimeout(() => view3d.current?.flyToMetres(x, y), 50); }} />}
           {tab === "planet" && <PlanetPanel status={status} stats={stats} first={history[0] ?? null} errors={errors} fps={fps} />}
           {tab === "inspect" && <Inspector sel={selected} tick={nowTick} />}
           {tab === "disasters" && <DisasterPanel events={events} tpd={tpd} dpy={dpy} onLocate={locate} />}

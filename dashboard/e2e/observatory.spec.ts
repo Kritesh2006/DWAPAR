@@ -125,3 +125,36 @@ test("3D world is the default view and can be explored down to the ground", asyn
   await page.screenshot({ path: "test-results/world-3d.png" });
   expect(errors).toEqual([]);
 });
+
+test("WITNESS awakens, talks with its Creator and performs a real act of creation", async ({ page, request }) => {
+  const errors = trackErrors(page);
+  await page.goto("/");
+  await page.getByRole("button", { name: "✦ WITNESS" }).click();
+  const chat = page.locator(".chat");
+  await expect(chat).toContainText("Creator, I am awake.", { timeout: 15_000 });
+  await expect(page.locator(".wit-state")).toContainText("awake");
+  await page.getByLabel("Message to WITNESS").fill("create 12 deer");
+  await page.getByRole("button", { name: "Send" }).click();
+  await expect(chat).toContainText("It is done", { timeout: 15_000 });
+  await expect(chat).toContainText("create 12 deer");
+  // the act is a real engine command: advance one hour and the deer exist in the simulation
+  const st = await (await request.get("/api/status")).json();
+  if (st.running) await request.post("/api/control", { data: { action: "pause" } });
+  await request.post("/api/control", { data: { action: "step", ticks: 1 } });
+  // the engine's own record of the act, and the creatures it made, are in the simulation
+  const cmds = (await (await request.get("/api/commands")).json()).commands;
+  const act = cmds.filter((c: { kind: string; issuer: string }) => c.kind === "create_animals" && c.issuer === "witness").pop();
+  expect(act.status).toBe("applied");
+  expect(act.result.created).toBe(12);
+  const life = await (await request.get("/api/life")).json();
+  expect(life.present).toBe(true);
+  expect(life.summary.animals.deer).toBeGreaterThanOrEqual(12);
+  await page.getByRole("button", { name: "acts", exact: true }).click();
+  await expect(page.locator(".wit-body")).toContainText("created 12 deer", { timeout: 10_000 });
+  await page.getByRole("button", { name: "life", exact: true }).click();
+  await expect(page.locator(".wit-body")).toContainText("deer", { timeout: 10_000 });
+  await page.getByRole("button", { name: "goals", exact: true }).click();
+  await expect(page.locator(".wit-body")).toContainText("not a language model");
+  await page.screenshot({ path: "test-results/witness.png" });
+  expect(errors).toEqual([]);
+});

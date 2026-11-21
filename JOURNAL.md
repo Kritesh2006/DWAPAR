@@ -269,3 +269,86 @@ TASKS.md.
 - Waterfalls on steep river reaches.
 - Laws-1.6 experiments toward 1,000 years.
 
+## Session 6 — WITNESS and life
+
+**Request.** Build WITNESS, a persistent autonomous intelligence that converses with its Creator,
+observes the world and acts on it for real. Then introduce animals, humans with independent minds,
+and the beginnings of civilisation, while preserving laws 1.6, determinism, saves and the 3D world.
+
+**Governance first.** The constitution forbade all of this (Art. I) and forbids paid or cloud APIs
+(Art. V). The owner's request is explicit authorisation, so the change is recorded as an amendment
+(D-035) rather than bypassed. That rules out a cloud LLM for WITNESS, so its mind is local and
+deterministic (D-036).
+
+**Built**
+- `divine`: ten command kinds; validation; tick-exact application before physics; a log; audits
+  (water moved from the ocean; rock, biomass and creatures counted); exact replay.
+- `prana` and `buddhi`:
+  - six animal species and human minds;
+  - spatial indexes per pool;
+  - JSON state in checkpoints;
+  - deterministic RNG streams.
+- `witness`: persistent identity, state, chat and memories; the daily
+  observe→remember→reason→plan→act→verify→learn cycle; goals and directives; grounded dialogue.
+- API endpoints, the Witness tab, and creatures, shelters and WITNESS's presence in 3D.
+
+**What went wrong, and the fix.** Found by running ecosystems and reading the outcomes, not by
+assuming the code was right.
+1. **Tigers:** 133 kills and 74 attacks on humans in 60 days, then starvation.
+   - Carnivores now feast and fast.
+   - Tigers no longer chase rabbits.
+   - Humans are a last resort for a starving predator.
+   - Most approaches end without an attack.
+2. **Thirst deaths, two causes:**
+   - A man in a local hollow with water just out of sight: "go downhill" pointed at his own tile.
+     Humans now ask the people nearby, then search.
+   - `move` tried only straight lines, so coasts trapped people. It now turns around obstacles.
+3. **No births:** couples slept in separate shelters. Partners now share the better home.
+4. **Performance:** `nearest()` took 53 % of the time. Per-pool indexes made it 3× faster.
+5. **Population explosions:** insects and rabbits grew to 14,000 without predators.
+   - Breeding is now density- and food-limited.
+   - An explicit, counted cap of 20,000 animals.
+6. **All 12 humans created by WITNESS died of thirst within 19 days while it brought rain
+   elsewhere.**
+   - Only 7 % of land counted as drinkable. Routed runoff ≥ 0.05 m³/s now counts as a stream
+     (70 % of land).
+   - WITNESS gained a "humans suffering" concern that overrides everything but "do not
+     intervene".
+   - Settlements are placed by permanent water.
+   - Next run: 12 → 17 humans, no deaths in 100 days.
+7. **WITNESS released wolves onto 42 plant-eaters.** Deer and rabbits went extinct, and it
+   declared the ecosystem "holds" by counting insect colonies.
+   - Balance is now judged on large prey; predators need 60+ prey; a predator release is judged by
+     what happens to the prey.
+   - Releasing predators too early is recorded as a mistake, and dwindling prey is restocked.
+8. **WITNESS repeated rain over the same drought 9 times in 20 days.** Per-place cooldowns were
+   added. Its learned value for rain converged near zero ("made little difference"), which is
+   honest.
+9. **3D:**
+   - The chat overlapped (flex-shrink).
+   - A shelter floated on the sea: the engine treated a whole coastal 2 km tile as land while the
+     renderer draws a continuous coastline. Creatures now respect the interpolated coastline
+     (D-040).
+   - Rendering-only trees grew through shelters; they are now cleared.
+10. **Tests:**
+    - The e2e test first counted deer; the persistent test engine breeds them. It now asserts the
+      engine's command record (`created: 12`).
+    - The old "prana/buddhi must be empty" test had become hollow. It was replaced with "no life
+      without a recorded command".
+
+**Tested**
+- Engine: 113 passed (99 pre-existing including golden fingerprints, so lifeless worlds are
+  bit-identical; 14 new).
+- The tiger, flight, replay and mid-day-restore tests also pass on seeds 3, 19 and 123.
+- Dashboard: type-check and build clean; Vitest 22; Playwright 8 (new: WITNESS converses and its
+  act creates 12 deer in the engine).
+
+**Not done (stated plainly)**
+- Open-ended language.
+- Wind control.
+- Farming, tools as objects, settlements and cooperation beyond families (Phase 5).
+- An OS-level background service.
+- Calibrated multi-decade ecology.
+- Creatures on the 2D map.
+- Real-hardware frame rates.
+

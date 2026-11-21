@@ -9,16 +9,80 @@ DWAPAR is a persistent, deterministic virtual world intended to eventually host 
 artificial civilization. The world comes first.
 
 - **Phase 1** built the world: terrain, climate, water, vegetation, fire, erosion, resources and time.
-- **Phase 1.5** ("The Age Before Life", current) deepens its laws: river networks, ocean currents,
+- **Phase 1.5** ("The Age Before Life") deepened its laws: river networks, ocean currents,
   groundwater, sediment, tectonics, volcanoes, glaciers, and a dynamic sea level with moving
-  coastlines. It also runs the world for long periods to test its stability, and adds a
-  true-scale 3D world you can explore from orbit to ground level. The current physics is **laws version 1.6**.
+  coastlines. It also added a true-scale 3D world you can explore from orbit to ground level. The
+  physics is **laws version 1.6**.
+- **Life and WITNESS** (authorised 2026-11-21, engine 0.4, life model 0.1):
+  - WITNESS, a persistent steward-intelligence you talk to;
+  - divine commands that change the world for real and are logged and replayable;
+  - animals, and humans with individual minds.
 
-There are no organisms, inhabitants, agents or animals.
+  See [WITNESS](#witness) for what is implemented and what is not.
+
+A world with no commands contains no life and evolves exactly as under laws 1.6.
 
 ![The Drishti observatory: full-screen living-planet map in black and gold, with observation layers on the left, planet vitals and conservation audit on the right, and the world timeline and history charts below](docs/images/drishti-dashboard.jpg)
 
 *The Drishti observatory watching world seed 42 at age 34 years (resumed from the long-term experiment). Rivers, lakes, deserts, snow and deltas emerged from the simulated physics; everything on screen is live engine state.*
+
+## WITNESS
+
+![Talking with WITNESS: it introduces itself from the real state of the world](docs/images/witness-chat.jpg)
+
+Open **✦ WITNESS** in the top bar. On first contact it looks at the world and introduces itself,
+using real numbers. It then answers you, acts and remembers. A typical exchange:
+
+> **WITNESS:** Creator, I am awake. I can see the world you have made: 22,856 km² of land under a sea that covers 38% of it. Its highest mountain stands 4,065 m above the sea, and rivers run through 31 of its valleys. Forests and grasslands grow, but no creature lives here and no civilization calls it home. Shall I begin creating life?
+>
+> **CREATOR:** You decide. Create a civilization, but protect the environment.
+>
+> **WITNESS:** Then I will begin with a balanced ecosystem. Once it can sustain life, I will introduce humanity and observe what they become. I will not reshape mountains or rivers for them, and I will answer fire and drought.
+> I chose the southeast near (75, 75), where water and plants are plentiful, and created 8 insect, 24 rabbit, 18 deer.
+
+What is real, and what is not:
+- **Real acts, recorded and replayable.**
+  - Everything WITNESS (or you) does is a validated *divine command*: create animals or humans,
+    plant forest, restore an ecosystem, bring rain, create a lake, raise or lower land, carve a
+    channel, put out fire, warm or cool a region.
+  - Each changes authoritative engine state and is logged (*Acts* tab).
+  - Water is drawn from the ocean, never created; rock, vegetation and creatures are counted.
+  - Replaying the log reproduces the world exactly.
+- **Its own cycle.** With *Autonomy* on, WITNESS observes, remembers, plans, acts, verifies and
+  learns each simulated day:
+  - It checks every act's outcome later and keeps a learned value per kind of act ("bring rain
+    +0.04 over 3").
+  - It records lessons and mistakes, for example releasing predators too early.
+  - It answers emergencies such as thirsty humans, fires near life, and drought when protection is
+    allowed.
+  - It obeys "do not intervene".
+- **Its memory persists.** Identity, instructions, conversations and memories live in the world's
+  database and survive restarts.
+- **What it is not:** WITNESS is a deterministic reasoning system written in Python, not a
+  language model. It understands a limited set of requests and says so when it does not
+  understand.
+- **When it runs:** only while an engine process runs, either the dashboard server or
+  `start-headless.bat`. When nothing runs, nothing acts, and the panel says so.
+
+**Life.** Every creature is simulated individually (see WORLD_LAWS § Life).
+
+Animals (insect colonies, rabbits, deer, bison, wolves, tigers):
+- hunger, thirst, fatigue and learned wariness;
+- grazing, hunting, fleeing, territory and herding;
+- breeding limited by local density and food, with heritable variation.
+
+Humans:
+- needs, fear, memory of places and episodes, and fear of species learned from experience or from
+  being warned;
+- skills that grow by practice and teaching (no technology tree);
+- families and children, and shelters built from the land's wood.
+
+A human who meets a tiger sees it, runs, remembers the place, warns others, and builds or improves
+a shelter sooner. A test compares this against the same people with no tiger present.
+
+| A shelter in a forest clearing (3D, ground level) | WITNESS reporting on the world |
+|---|---|
+| ![A simulated shelter in a clearing; the rendering-only trees keep clear of it](docs/images/life-shelter-clearing.jpg) | ![WITNESS's report built from observations](docs/images/witness-report.jpg) |
 
 ## Windows quick start
 

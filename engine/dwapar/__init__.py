@@ -1,15 +1,17 @@
 """DWAPAR (द्वापर) — An Experiment in Digital Civilization.
 
-Phase 1 engine: the world exists and changes on its own. No inhabitants.
-
 Systems:
     brahmanda  universe, terrain, physical laws, resources
     kala       time and the simulation clock
-    prakriti   climate, weather, natural processes
-    smriti     persistence, history, checkpoints
+    prakriti   climate, weather, natural processes (laws version: dwapar.laws)
+    smriti     persistence, history, checkpoints, command log, WITNESS's memory
+    divine     validated, logged, replayable commands — the only non-physical way a world changes
+    prana      life: animals and the Life container (life model version: prana.life.LIFE_VERSION)
+    buddhi     minds: individual humans with needs, memory, learning and families
+    witness    WITNESS, the world's persistent steward-intelligence
     api        Drishti backend (the dashboard lives in /dashboard)
 
-Reserved, intentionally empty: prana (life), buddhi (intelligence).
+A world without commands and without life evolves exactly as under the laws alone.
 """
 
-__version__ = "0.3.0"
+__version__ = "0.4.0"

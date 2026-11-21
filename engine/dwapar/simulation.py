@@ -38,6 +38,10 @@ class Simulation:
         self.last_hour = {"precip": 0.0, "evap": 0.0, "burned": 0}
         self.validate_every = 24  # ticks
         self.baseline = world.meta.get("baseline")
+        #: Optional observer called at the start of each simulated day, inside the step, with the
+        #: lock held (WITNESS's autonomous cycle). It may only act by submitting commands.
+        self.day_hooks: list = []
+        self.on_command: list = []  # callbacks(cmd, status, result_or_error) after a command resolves
 
     # ----------------------------------------------------------- creation
     @classmethod
@@ -83,7 +87,14 @@ class Simulation:
         w = self.world
         cal = Calendar.at(w.tick, self.cfg)
         events: list[dict] = []
+        if w.meta.get("command_queue"):
+            self._apply_commands(events)
         self.last_hour = self.prakriti.step_hour(w, cal, events)
+        if w.meta.get("forcings"):
+            from .divine import apply_forcings
+            apply_forcings(w)
+        if w.life is not None:
+            w.life.step_hour(w, cal, events)
         w.tick += 1
         nxt = Calendar.at(w.tick, self.cfg)
         if nxt.is_day_start:
@@ -92,10 +103,48 @@ class Simulation:
             w.validate()  # refuse to continue from an impossible state
         self._emit(events)
         if nxt.is_day_start:
+            for hook in list(self.day_hooks):
+                hook(self)
             self.record_stats()
             if self.store is not None and self.cfg.checkpoint_every_days and \
                     nxt.day_total % self.cfg.checkpoint_every_days == 0:
                 self.checkpoint(label="auto")
+
+    # ------------------------------------------------------------ commands
+    def submit_command(self, kind: str, params: dict, issuer: str, reason: str = "") -> dict:
+        """Validate and queue a divine command; it takes effect at the start of the next tick."""
+        from .divine import CommandError, submit
+        with self.lock:
+            try:
+                return submit(self.world, kind, params, issuer, reason)
+            except CommandError as exc:
+                if self.store is not None and self.world_id is not None:
+                    self.store.add_command(self.world_id, {"seq": None, "tick": self.world.tick, "issuer": issuer,
+                                                           "kind": kind, "params": params, "reason": reason},
+                                           "rejected", {"error": str(exc)})
+                raise
+
+    def _apply_commands(self, events: list[dict]) -> None:
+        from .divine import CommandError, apply_command, describe
+        w = self.world
+        queue = w.meta["command_queue"]
+        due = sorted((c for c in queue if c["tick"] <= w.tick), key=lambda c: c["seq"])
+        w.meta["command_queue"] = [c for c in queue if c["tick"] > w.tick]
+        for cmd in due:
+            cmd = dict(cmd, tick=w.tick)
+            try:
+                result = apply_command(w, cmd, self.prakriti, w.life)
+                status = "applied"
+                p = cmd["params"]
+                events.append({"tick": w.tick, "kind": "divine_act", "x": p.get("x", p.get("x0")),
+                               "y": p.get("y", p.get("y0")),
+                               "message": f"{cmd['issuer'].capitalize()} {describe(cmd, result, self.cfg.tile_size_m)}"})
+            except CommandError as exc:
+                result, status = {"error": str(exc)}, "failed"
+            if self.store is not None and self.world_id is not None:
+                self.store.add_command(self.world_id, cmd, status, result)
+            for cb in list(self.on_command):
+                cb(cmd, status, result)
 
     def _emit(self, events: list[dict]) -> None:
         if not events:
@@ -142,6 +191,8 @@ class Simulation:
             "budgets": self.budgets(),
             "terrain": {t.name.lower(): int(counts[t]) for t in Terrain},
             "resources": res,
+            **({"life": w.life.summary()} if w.life is not None else {}),
+            **({"divine": dict(w.meta["divine"])} if "divine" in w.meta else {}),
         }
 
     def water_budget(self) -> dict:
@@ -192,7 +243,8 @@ class Simulation:
         if not self.baseline:
             return {}
         b0, b = self.baseline, self.budgets()
-        rock_expected = b0["rock_t"] + b["tectonic_rock_t"] + b["volcanic_rock_t"]
+        divine_rock = float(self.world.meta.get("divine", {}).get("rock_t", 0.0))  # counted reshaping (D-035)
+        rock_expected = b0["rock_t"] + b["tectonic_rock_t"] + b["volcanic_rock_t"] + divine_rock
         sc_expected = (b0["sand_clay_t"] + b["sediment_deposited_t"] - b["deposits_eroded_t"]
                        + b["volcanic_clay_t"])
         stone_expected = b0["stone_t"] + b["volcanic_stone_t"]
