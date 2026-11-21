@@ -78,7 +78,7 @@ Status legend: ✅ done and tested · 🟡 partial · ⬜ not started
 ## Last verified (session 6)
 - Engine: `pytest` **113 passed** (99 existing + 14 new), local.
 - Dashboard: strict type-check and build clean; Vitest **22 passed**; Playwright **8 passed** (local, SwiftShader).
-- CI: recorded below after the push.
+- CI run 44931554445 on `9a5039d`: Linux, Windows (incl. .bat scripts) and dashboard (type-check, Vitest 22, Playwright 8 incl. WITNESS) all green. The first push (`c42cdbf`, run 44930749680) failed one API test pinned to the old engine version; fixed in `9a5039d`.
 
 ## Previously verified (session 5)
 - Engine: `pytest` **99 passed** (local); no engine code changed.
